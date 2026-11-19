@@ -11,7 +11,9 @@ try {
   if (typeof net.setDefaultAutoSelectFamily === "function") {
     net.setDefaultAutoSelectFamily(false);
   }
-  const originalLookup = dns.lookup.bind(dns);
+  const originalLookup = dns.lookup.bind(dns) as (
+    ...args: unknown[]
+  ) => unknown;
   // @ts-expect-error override dns.lookup to filter out unreachable IPv6 AAAA records for Google hosts
   dns.lookup = function (
     hostname: string,
@@ -26,7 +28,7 @@ try {
       return originalLookup(
         hostname,
         isGoogleHost ? { family: 4 } : {},
-        options as Parameters<typeof originalLookup>[2]
+        options
       );
     }
 
@@ -51,18 +53,10 @@ try {
         );
       }
       opts.family = 4;
-      return originalLookup(
-        hostname,
-        opts,
-        callback as Parameters<typeof originalLookup>[2]
-      );
+      return originalLookup(hostname, opts, callback);
     }
 
-    return originalLookup(
-      hostname,
-      options as Parameters<typeof originalLookup>[1],
-      callback as Parameters<typeof originalLookup>[2]
-    );
+    return originalLookup(hostname, options, callback);
   };
 } catch {
   // Ignore if unsupported in edge runtime
