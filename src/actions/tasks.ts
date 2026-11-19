@@ -1,0 +1,556 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { unlink } from "fs/promises";
+import path from "path";
+import { prisma } from "@/lib/prisma";
+import {
+  canCreateTaskInProject,
+  canEditTask,
+  createActivityLog,
+  createNotification,
+  generateNextTaskKey,
+  recalculateParentProgress,
+  requireAuth,
+} from "@/lib/permissions";
+import {
+  commentCreateSchema,
+  taskCreateSchema,
+  taskUpdateSchema,
+} from "@/lib/validations";
+import type { TaskStatus } from "@prisma/client";
+
+export async function createTaskAction(values: unknown) {
+  try {
+    const user = await requireAuth();
+    const parsed = taskCreateSchema.safeParse(values);
+    if (!parsed.success) {
+      return { error: parsed.error.errors[0]?.message || "Invalid task data" };
+    }
+
+    const data = parsed.data;
+    const allowed = await canCreateTaskInProject(
+      user,
+      data.projectId,
+      data.parentId
+    );
+    if (!allowed) {
+      return {
+        error: data.parentId
+          ? "You can only create subtasks on tasks assigned to you."
+          : "You do not have permission to create tasks in this project.",
+      };
+    }
+
+    const taskKey = await generateNextTaskKey(data.projectId);
+    const maxPos = await prisma.task.aggregate({
+      where: {
+        projectId: data.projectId,
+        status: data.status,
+        parentId: data.parentId || null,
+      },
+      _max: { position: true },
+    });
+
+    const initialProgress =
+      data.status === "DONE"
+        ? 100
+        : data.status === "IN_REVIEW"
+        ? 75
+        : data.status === "IN_PROGRESS"
+        ? 40
+        : 0;
+
+    const collaboratorIds = Array.from(
+      new Set(data.collaboratorIds.filter((id) => id && id !== data.assigneeId))
+    );
+
+    const task = await prisma.task.create({
+      data: {
+        taskKey,
+        title: data.title.trim(),
+        description: data.description?.trim() || null,
+        projectId: data.projectId,
+        parentId: data.parentId || null,
+        status: data.status,
+        priority: data.priority,
+        position: (maxPos._max.position ?? -1) + 1,
+        progress: initialProgress,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        completedAt: data.status === "DONE" ? new Date() : null,
+        assigneeId: data.assigneeId || null,
+        creatorId: user.id,
+        collaborators: {
+          create: collaboratorIds.map((userId) => ({ userId })),
+        },
+        tags: {
+          create: Array.from(new Set(data.tagIds)).map((tagId) => ({ tagId })),
+        },
+        dependencies: {
+          create: Array.from(new Set(data.dependencyIds)).map((dependsOnId) => ({
+            dependsOnId,
+          })),
+        },
+      },
+    });
+
+    if (data.parentId) {
+      await recalculateParentProgress(data.parentId);
+    }
+
+    await createActivityLog({
+      action: data.parentId ? "SUBTASK_ADDED" : "TASK_CREATED",
+      entityType: "TASK",
+      entityId: task.id,
+      description: data.parentId
+        ? `added subtask ${task.taskKey}: ${task.title}`
+        : `created task ${task.taskKey}: ${task.title}`,
+      actorId: user.id,
+      projectId: data.projectId,
+      taskId: data.parentId || task.id,
+    });
+
+    if (task.assigneeId) {
+      await createNotification({
+        userId: task.assigneeId,
+        actorId: user.id,
+        type: "TASK_ASSIGNED",
+        title: `Assigned: ${task.taskKey}`,
+        message: `${user.name} assigned you to "${task.title}".`,
+        link: `/tasks?taskId=${task.parentId || task.id}`,
+        taskId: task.id,
+      });
+    }
+
+    for (const collabId of collaboratorIds) {
+      await createNotification({
+        userId: collabId,
+        actorId: user.id,
+        type: "TASK_ASSIGNED",
+        title: `Collaborator on ${task.taskKey}`,
+        message: `${user.name} added you as a collaborator on "${task.title}".`,
+        link: `/tasks?taskId=${task.parentId || task.id}`,
+        taskId: task.id,
+      });
+    }
+
+    revalidatePath("/tasks");
+    revalidatePath("/my-tasks");
+    revalidatePath("/dashboard");
+    revalidatePath("/calendar");
+    revalidatePath(`/projects/${data.projectId}`);
+    return { success: true, id: task.id, taskKey: task.taskKey };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create task";
+    return { error: message };
+  }
+}
+
+export async function updateTaskAction(values: unknown) {
+  try {
+    const user = await requireAuth();
+    const parsed = taskUpdateSchema.safeParse(values);
+    if (!parsed.success) {
+      return { error: parsed.error.errors[0]?.message || "Invalid task update" };
+    }
+
+    const data = parsed.data;
+    const perm = await canEditTask(user, data.id);
+    if (!perm.allowed) {
+      return { error: "You do not have permission to update this task." };
+    }
+
+    const existing = await prisma.task.findUnique({
+      where: { id: data.id },
+      include: { _count: { select: { subtasks: true } } },
+    });
+    if (!existing) return { error: "Task not found." };
+
+    const updateData: Record<string, unknown> = {};
+
+    // Employees without fullEdit can update status (and description/title on their own subtasks)
+    if (data.status !== undefined) {
+      updateData.status = data.status;
+      updateData.completedAt = data.status === "DONE" ? new Date() : null;
+      if (existing._count.subtasks === 0) {
+        updateData.progress =
+          data.status === "DONE"
+            ? 100
+            : data.status === "IN_REVIEW"
+            ? 75
+            : data.status === "IN_PROGRESS"
+            ? 40
+            : 0;
+      }
+    }
+
+    if (perm.fullEdit) {
+      if (data.title !== undefined) updateData.title = data.title.trim();
+      if (data.description !== undefined)
+        updateData.description = data.description?.trim() || null;
+      if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.assigneeId !== undefined)
+        updateData.assigneeId = data.assigneeId || null;
+      if (data.startDate !== undefined)
+        updateData.startDate = data.startDate ? new Date(data.startDate) : null;
+      if (data.dueDate !== undefined)
+        updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+      if (data.position !== undefined) updateData.position = data.position;
+    }
+
+    const updated = await prisma.task.update({
+      where: { id: data.id },
+      data: updateData,
+    });
+
+    if (perm.fullEdit && data.collaboratorIds !== undefined) {
+      const cleanIds = Array.from(
+        new Set(data.collaboratorIds.filter((id) => id && id !== updated.assigneeId))
+      );
+      await prisma.taskAssignee.deleteMany({ where: { taskId: data.id } });
+      if (cleanIds.length > 0) {
+        await prisma.taskAssignee.createMany({
+          data: cleanIds.map((userId) => ({ taskId: data.id, userId })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    if (perm.fullEdit && data.tagIds !== undefined) {
+      await prisma.taskTag.deleteMany({ where: { taskId: data.id } });
+      const uniqueTags = Array.from(new Set(data.tagIds));
+      if (uniqueTags.length > 0) {
+        await prisma.taskTag.createMany({
+          data: uniqueTags.map((tagId) => ({ taskId: data.id, tagId })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    if (perm.fullEdit && data.dependencyIds !== undefined) {
+      await prisma.taskDependency.deleteMany({ where: { taskId: data.id } });
+      const uniqueDeps = Array.from(
+        new Set(data.dependencyIds.filter((depId) => depId !== data.id))
+      );
+      if (uniqueDeps.length > 0) {
+        await prisma.taskDependency.createMany({
+          data: uniqueDeps.map((dependsOnId) => ({
+            taskId: data.id,
+            dependsOnId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    if (existing.parentId) {
+      await recalculateParentProgress(existing.parentId);
+    }
+
+    // Activity & Notifications
+    if (data.status && data.status !== existing.status) {
+      const labelMap: Record<TaskStatus, string> = {
+        TODO: "To Do",
+        IN_PROGRESS: "In Progress",
+        IN_REVIEW: "In Review",
+        DONE: "Done",
+      };
+      await createActivityLog({
+        action: "STATUS_CHANGED",
+        entityType: "TASK",
+        entityId: updated.id,
+        description: `moved ${updated.taskKey} (${updated.title}) to ${labelMap[data.status]}`,
+        actorId: user.id,
+        projectId: updated.projectId,
+        taskId: updated.parentId || updated.id,
+      });
+
+      const notifyUserId =
+        updated.assigneeId && updated.assigneeId !== user.id
+          ? updated.assigneeId
+          : updated.creatorId;
+      if (notifyUserId && notifyUserId !== user.id) {
+        await createNotification({
+          userId: notifyUserId,
+          actorId: user.id,
+          type: "TASK_UPDATED",
+          title: `${updated.taskKey} moved to ${labelMap[data.status]}`,
+          message: `${user.name} updated "${updated.title}" to ${labelMap[data.status]}.`,
+          link: `/tasks?taskId=${updated.parentId || updated.id}`,
+          taskId: updated.id,
+        });
+      }
+    }
+
+    if (
+      perm.fullEdit &&
+      data.assigneeId &&
+      data.assigneeId !== existing.assigneeId
+    ) {
+      await createActivityLog({
+        action: "ASSIGNEE_CHANGED",
+        entityType: "TASK",
+        entityId: updated.id,
+        description: `reassigned ${updated.taskKey}: ${updated.title}`,
+        actorId: user.id,
+        projectId: updated.projectId,
+        taskId: updated.parentId || updated.id,
+      });
+
+      await createNotification({
+        userId: data.assigneeId,
+        actorId: user.id,
+        type: "TASK_ASSIGNED",
+        title: `Assigned: ${updated.taskKey}`,
+        message: `${user.name} assigned you to "${updated.title}".`,
+        link: `/tasks?taskId=${updated.parentId || updated.id}`,
+        taskId: updated.id,
+      });
+    }
+
+    revalidatePath("/tasks");
+    revalidatePath("/my-tasks");
+    revalidatePath("/dashboard");
+    revalidatePath("/calendar");
+    revalidatePath(`/projects/${updated.projectId}`);
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update task";
+    return { error: message };
+  }
+}
+
+export async function moveTaskKanbanAction(
+  taskId: string,
+  newStatus: TaskStatus,
+  newPosition: number
+) {
+  return updateTaskAction({
+    id: taskId,
+    status: newStatus,
+    position: newPosition,
+  });
+}
+
+export async function deleteTaskAction(taskId: string) {
+  try {
+    const user = await requireAuth();
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        taskKey: true,
+        title: true,
+        projectId: true,
+        parentId: true,
+        creatorId: true,
+      },
+    });
+    if (!task) return { error: "Task not found." };
+
+    const perm = await canEditTask(user, taskId);
+    if (!perm.fullEdit && task.creatorId !== user.id) {
+      return { error: "You do not have permission to delete this task." };
+    }
+
+    await prisma.task.delete({ where: { id: taskId } });
+
+    if (task.parentId) {
+      await recalculateParentProgress(task.parentId);
+    }
+
+    await createActivityLog({
+      action: "TASK_DELETED",
+      entityType: "PROJECT",
+      entityId: task.projectId,
+      description: `deleted ${task.taskKey}: ${task.title}`,
+      actorId: user.id,
+      projectId: task.projectId,
+    });
+
+    revalidatePath("/tasks");
+    revalidatePath("/my-tasks");
+    revalidatePath("/dashboard");
+    revalidatePath("/calendar");
+    revalidatePath(`/projects/${task.projectId}`);
+    return { success: true };
+  } catch {
+    return { error: "Failed to delete task." };
+  }
+}
+
+export async function addTaskCommentAction(values: unknown) {
+  try {
+    const user = await requireAuth();
+    const parsed = commentCreateSchema.safeParse(values);
+    if (!parsed.success) {
+      return { error: parsed.error.errors[0]?.message || "Invalid comment" };
+    }
+
+    const task = await prisma.task.findUnique({
+      where: { id: parsed.data.taskId },
+      include: {
+        collaborators: { select: { userId: true } },
+      },
+    });
+    if (!task) return { error: "Task not found." };
+
+    const comment = await prisma.comment.create({
+      data: {
+        taskId: task.id,
+        authorId: user.id,
+        content: parsed.data.content.trim(),
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+            designation: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    await createActivityLog({
+      action: "COMMENT_ADDED",
+      entityType: "TASK",
+      entityId: task.id,
+      description: `commented on ${task.taskKey}: ${task.title}`,
+      actorId: user.id,
+      projectId: task.projectId,
+      taskId: task.parentId || task.id,
+    });
+
+    // Detect @mentions
+    const mentionMatches = parsed.data.content.match(/@([A-Za-z][A-Za-z0-9._-]*)/g) || [];
+    const mentionedUserIds = new Set<string>();
+
+    if (mentionMatches.length > 0) {
+      const allUsers = await prisma.user.findMany({
+        where: { status: { not: "INACTIVE" } },
+        select: { id: true, name: true, email: true },
+      });
+
+      for (const rawMention of mentionMatches) {
+        const token = rawMention.slice(1).toLowerCase();
+        const match = allUsers.find(
+          (u) =>
+            u.name.toLowerCase().startsWith(token) ||
+            u.name.toLowerCase().replace(/\s+/g, "").includes(token) ||
+            u.email.toLowerCase().startsWith(token)
+        );
+        if (match && match.id !== user.id) {
+          mentionedUserIds.add(match.id);
+        }
+      }
+    }
+
+    for (const mentionedId of mentionedUserIds) {
+      await createNotification({
+        userId: mentionedId,
+        actorId: user.id,
+        type: "MENTION",
+        title: `${user.name} mentioned you in ${task.taskKey}`,
+        message: parsed.data.content.slice(0, 140),
+        link: `/tasks?taskId=${task.parentId || task.id}`,
+        taskId: task.id,
+      });
+    }
+
+    // Notify assignee and collaborators who weren't already mentioned
+    const participants = new Set<string>();
+    if (task.assigneeId) participants.add(task.assigneeId);
+    if (task.creatorId) participants.add(task.creatorId);
+    for (const c of task.collaborators) participants.add(c.userId);
+
+    for (const participantId of participants) {
+      if (participantId !== user.id && !mentionedUserIds.has(participantId)) {
+        await createNotification({
+          userId: participantId,
+          actorId: user.id,
+          type: "COMMENT_ADDED",
+          title: `New comment on ${task.taskKey}`,
+          message: `${user.name}: ${parsed.data.content.slice(0, 120)}`,
+          link: `/tasks?taskId=${task.parentId || task.id}`,
+          taskId: task.id,
+        });
+      }
+    }
+
+    revalidatePath("/tasks");
+    revalidatePath(`/projects/${task.projectId}`);
+    return {
+      success: true,
+      comment: {
+        ...comment,
+        createdAt: comment.createdAt.toISOString(),
+      },
+    };
+  } catch {
+    return { error: "Failed to post comment." };
+  }
+}
+
+export async function deleteAttachmentAction(attachmentId: string) {
+  try {
+    const user = await requireAuth();
+    const attachment = await prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: { task: { select: { id: true, projectId: true } } },
+    });
+    if (!attachment) return { error: "Attachment not found." };
+
+    const perm = await canEditTask(user, attachment.taskId);
+    if (!perm.allowed && attachment.uploadedById !== user.id) {
+      return { error: "You do not have permission to delete this file." };
+    }
+
+    await prisma.attachment.delete({ where: { id: attachmentId } });
+
+    try {
+      const fullPath = path.join(process.cwd(), attachment.storagePath);
+      await unlink(fullPath);
+    } catch {
+      // Ignore if file already missing on disk
+    }
+
+    revalidatePath("/tasks");
+    revalidatePath(`/projects/${attachment.task.projectId}`);
+    return { success: true };
+  } catch {
+    return { error: "Failed to delete attachment." };
+  }
+}
+
+export async function markNotificationReadAction(notificationId: string) {
+  try {
+    const user = await requireAuth();
+    await prisma.notification.updateMany({
+      where: { id: notificationId, userId: user.id },
+      data: { isRead: true },
+    });
+    revalidatePath("/inbox");
+    return { success: true };
+  } catch {
+    return { error: "Failed to update notification." };
+  }
+}
+
+export async function markAllNotificationsReadAction() {
+  try {
+    const user = await requireAuth();
+    await prisma.notification.updateMany({
+      where: { userId: user.id, isRead: false },
+      data: { isRead: true },
+    });
+    revalidatePath("/inbox");
+    return { success: true };
+  } catch {
+    return { error: "Failed to mark notifications as read." };
+  }
+}
