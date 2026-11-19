@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragEndEvent,
+  DragOverEvent,
   DragOverlay,
   DragStartEvent,
+  KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   closestCorners,
   useDroppable,
   useSensor,
@@ -15,6 +18,8 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -22,6 +27,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Calendar,
   GitBranch,
+  GripVertical,
   MessageSquare,
   Paperclip,
   Plus,
@@ -30,7 +36,12 @@ import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
 import type { TaskListItem } from "@/types";
 import { moveTaskKanbanAction } from "@/actions/tasks";
-import { cn, formatCompactDate, isTaskOverdue, STATUS_CONFIG } from "@/lib/utils";
+import {
+  cn,
+  formatCompactDate,
+  isTaskOverdue,
+  STATUS_CONFIG,
+} from "@/lib/utils";
 import { PriorityBadge } from "@/components/shared/badges";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
@@ -60,7 +71,7 @@ function KanbanTaskCard({
     isDragging,
   } = useSortable({
     id: task.id,
-    data: { type: "task", task },
+    data: { type: "task", task, status: task.status },
   });
 
   const style = isOverlay
@@ -80,16 +91,26 @@ function KanbanTaskCard({
       style={style}
       {...(isOverlay ? {} : attributes)}
       {...(isOverlay ? {} : listeners)}
-      onClick={() => onSelect(task.id)}
+      onClick={() => {
+        if (!isDragging) onSelect(task.id);
+      }}
       className={cn(
-        "group cursor-pointer rounded-lg border border-[#EAECF0] bg-white p-3.5 shadow-subtle transition-all hover:border-[#C7CBE0] hover:shadow-card select-none",
-        isDragging && "opacity-35",
-        isOverlay && "shadow-lg border-[#635BDB] rotate-[1deg]"
+        "group relative rounded-lg border border-[#EAECF0] bg-white p-3.5 shadow-subtle transition-all hover:border-[#C7CBE0] hover:shadow-card select-none touch-none",
+        isOverlay
+          ? "cursor-grabbing shadow-xl border-[#635BDB] ring-2 ring-[#635BDB]/20 rotate-[1.5deg] scale-[1.02]"
+          : "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-30 border-dashed border-[#635BDB]"
       )}
     >
-      {/* Top Meta Row */}
+      {/* Top Meta Row with Grab Handle */}
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className="inline-flex h-5 w-5 -ml-1 items-center justify-center rounded text-[#9CA3AF] group-hover:bg-[#F3F4F6] group-hover:text-[#525866] transition-colors"
+            title="Grab and drag to move"
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </span>
           <span
             className="h-2 w-2 shrink-0 rounded-[2px]"
             style={{ backgroundColor: task.project.color }}
@@ -213,8 +234,8 @@ function KanbanColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex flex-col rounded-lg border border-[#EAECF0] bg-[#F3F5F8]/70 min-h-[460px] transition-colors",
-        isOver && "border-[#635BDB] bg-[#F0EFFF]/40"
+        "flex flex-col rounded-lg border border-[#EAECF0] bg-[#F3F5F8]/70 min-h-[480px] transition-colors",
+        isOver && "border-[#635BDB] bg-[#F0EFFF]/50 ring-2 ring-[#635BDB]/15"
       )}
     >
       {/* Column Header */}
@@ -224,7 +245,7 @@ function KanbanColumn({
           <h3 className="text-[13px] font-semibold text-[#20232B]">
             {column.label}
           </h3>
-          <span className="rounded-full bg-white border border-[#EAECF0] px-1.5 py-0.2 text-[11px] font-medium text-[#737987]">
+          <span className="rounded-full bg-white border border-[#EAECF0] px-1.5 text-[11px] font-medium text-[#737987]">
             {tasks.length}
           </span>
         </div>
@@ -247,8 +268,15 @@ function KanbanColumn({
       >
         <div className="flex-1 p-2.5 space-y-2.5">
           {tasks.length === 0 ? (
-            <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[#D9DEE7] text-[11.5px] text-[#9CA3AF]">
-              Drop tasks here
+            <div
+              className={cn(
+                "flex h-28 items-center justify-center rounded-md border border-dashed text-[11.5px] transition-colors",
+                isOver
+                  ? "border-[#635BDB] bg-[#F0EFFF]/60 text-[#5148C9] font-medium"
+                  : "border-[#D9DEE7] text-[#9CA3AF]"
+              )}
+            >
+              {isOver ? `Drop into ${column.label}` : "Grab and drag tasks here"}
             </div>
           ) : (
             tasks.map((task) => (
@@ -280,81 +308,124 @@ export function KanbanBoard({
 }) {
   const router = useRouter();
   const [activeTask, setActiveTask] = useState<TaskListItem | null>(null);
+  const initialStatusRef = useRef<TaskStatus | null>(null);
+  const snapshotRef = useRef<TaskListItem[]>(tasks);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
+  const resolveStatus = (overId: string): TaskStatus | null => {
+    if (COLUMNS.some((c) => c.id === overId)) {
+      return overId as TaskStatus;
+    }
+    const overTask = tasks.find((t) => t.id === overId);
+    return overTask ? overTask.status : null;
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     const found = tasks.find((t) => t.id === event.active.id);
-    if (found) setActiveTask(found);
+    if (found) {
+      setActiveTask(found);
+      initialStatusRef.current = found.status;
+      snapshotRef.current = tasks;
+    }
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    const currentTask = tasks.find((t) => t.id === activeId);
+    if (!currentTask) return;
+
+    const targetStatus = resolveStatus(overId);
+    if (!targetStatus) return;
+
+    if (currentTask.status !== targetStatus) {
+      const updated = tasks.map((t) =>
+        t.id === activeId
+          ? {
+              ...t,
+              status: targetStatus,
+              progress:
+                t.subtasks.length === 0
+                  ? targetStatus === "DONE"
+                    ? 100
+                    : targetStatus === "IN_REVIEW"
+                    ? 75
+                    : targetStatus === "IN_PROGRESS"
+                    ? 40
+                    : 0
+                  : t.progress,
+            }
+          : t
+      );
+      onTasksChange(updated);
+    } else {
+      const oldIndex = tasks.findIndex((t) => t.id === activeId);
+      const newIndex = tasks.findIndex((t) => t.id === overId);
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        onTasksChange(arrayMove(tasks, oldIndex, newIndex));
+      }
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveTask(null);
-    if (!over) return;
-
     const draggedId = String(active.id);
-    const draggedTask = tasks.find((t) => t.id === draggedId);
-    if (!draggedTask) return;
+    const currentTask = tasks.find((t) => t.id === draggedId);
+    const startStatus = initialStatusRef.current;
 
-    let targetStatus: TaskStatus = draggedTask.status;
-    const overId = String(over.id);
+    setActiveTask(null);
+    initialStatusRef.current = null;
 
-    if (COLUMNS.some((c) => c.id === overId)) {
-      targetStatus = overId as TaskStatus;
-    } else {
-      const overTask = tasks.find((t) => t.id === overId);
-      if (overTask) targetStatus = overTask.status;
-    }
-
-    if (targetStatus === draggedTask.status && draggedId === overId) {
+    if (!over || !currentTask) {
+      onTasksChange(snapshotRef.current);
       return;
     }
 
-    const previous = tasks;
-    const targetColumnCount = tasks.filter(
-      (t) => t.status === targetStatus && t.id !== draggedId
-    ).length;
+    const overId = String(over.id);
+    const targetStatus = resolveStatus(overId) || currentTask.status;
 
-    const optimistic = tasks.map((t) =>
-      t.id === draggedId
-        ? {
-            ...t,
-            status: targetStatus,
-            progress:
-              t.subtasks.length === 0
-                ? targetStatus === "DONE"
-                  ? 100
-                  : targetStatus === "IN_REVIEW"
-                  ? 75
-                  : targetStatus === "IN_PROGRESS"
-                  ? 40
-                  : 0
-                : t.progress,
-          }
-        : t
+    const columnTasks = tasks.filter((t) => t.status === targetStatus);
+    const newPosition = Math.max(
+      0,
+      columnTasks.findIndex((t) => t.id === draggedId)
     );
 
-    onTasksChange(optimistic);
+    if (startStatus === targetStatus && draggedId === overId) {
+      return;
+    }
 
     const res = await moveTaskKanbanAction(
       draggedId,
       targetStatus,
-      targetColumnCount
+      newPosition
     );
     if (res.error) {
-      onTasksChange(previous);
+      onTasksChange(snapshotRef.current);
       toast.error(res.error);
       return;
     }
 
-    toast.success(
-      `${draggedTask.taskKey} moved to ${STATUS_CONFIG[targetStatus].label}`
-    );
+    if (startStatus !== targetStatus) {
+      toast.success(
+        `${currentTask.taskKey} moved to ${STATUS_CONFIG[targetStatus].label}`
+      );
+    }
     router.refresh();
   };
 
@@ -363,6 +434,7 @@ export function KanbanBoard({
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
@@ -380,11 +452,7 @@ export function KanbanBoard({
 
       <DragOverlay>
         {activeTask ? (
-          <KanbanTaskCard
-            task={activeTask}
-            onSelect={() => {}}
-            isOverlay
-          />
+          <KanbanTaskCard task={activeTask} onSelect={() => {}} isOverlay />
         ) : null}
       </DragOverlay>
     </DndContext>

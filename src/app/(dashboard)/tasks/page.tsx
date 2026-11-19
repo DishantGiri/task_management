@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default async function AllTasksPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?reauth=1");
 
   const [tasks, ref] = await Promise.all([
     getTasksList(user),

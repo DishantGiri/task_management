@@ -15,6 +15,7 @@ declare module "next-auth" {
       name: string;
       email: string;
       role: Role;
+      status: UserStatus;
       designation: string | null;
       avatarUrl: string | null;
       departmentId: string | null;
@@ -170,3 +171,26 @@ export interface ProjectListItem {
     progress: number;
   };
 }
+
+export interface PersonalChecklistItem {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+export interface PersonalTaskItem {
+  id: string;
+  title: string;
+  notes: string | null;
+  status: TaskStatus;
+  priority: Priority;
+  category: string;
+  dueDate: string | null;
+  isPinned: boolean;
+  checklist: PersonalChecklistItem[];
+  completedAt: string | null;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+

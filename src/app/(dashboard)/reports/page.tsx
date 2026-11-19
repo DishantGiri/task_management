@@ -7,7 +7,7 @@ import { ReportsClient } from "@/components/dashboard/reports-client";
 
 export default async function ReportsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?reauth=1");
 
   const accessibleProjectIds = await getAccessibleProjectIds(user);
   const projectFilter =

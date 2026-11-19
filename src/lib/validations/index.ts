@@ -18,9 +18,11 @@ export const registerSchema = z.object({
 export const employeeCreateSchema = z.object({
   name: z.string().min(2, "Name is required").max(100),
   email: z.string().email("Valid email is required"),
-  password: z.string().min(8, "Temporary password must be at least 8 characters"),
+  password: z.string().optional(),
   role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]),
-  status: z.enum(["ACTIVE", "INACTIVE", "INVITED"]).default("ACTIVE"),
+  status: z
+    .enum(["ACTIVE", "PENDING", "INACTIVE", "INVITED"])
+    .default("ACTIVE"),
   departmentId: z.string().nullable().optional(),
   designation: z.string().max(100).nullable().optional(),
   avatarUrl: z.string().url().or(z.literal("")).nullable().optional(),
@@ -31,7 +33,7 @@ export const employeeUpdateSchema = z.object({
   name: z.string().min(2, "Name is required").max(100),
   email: z.string().email("Valid email is required"),
   role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]),
-  status: z.enum(["ACTIVE", "INACTIVE", "INVITED"]),
+  status: z.enum(["ACTIVE", "PENDING", "INACTIVE", "INVITED"]),
   departmentId: z.string().nullable().optional(),
   designation: z.string().max(100).nullable().optional(),
   avatarUrl: z.string().url().or(z.literal("")).nullable().optional(),

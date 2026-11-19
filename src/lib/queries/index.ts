@@ -4,8 +4,53 @@ import {
   type SessionUser,
 } from "@/lib/permissions";
 import type { Prisma } from "@prisma/client";
-import type { ProjectListItem, TaskListItem } from "@/types";
+import type {
+  PersonalChecklistItem,
+  PersonalTaskItem,
+  ProjectListItem,
+  TaskListItem,
+} from "@/types";
 import { startOfDay, subDays, format } from "date-fns";
+
+export async function getPersonalTasks(
+  userId: string
+): Promise<PersonalTaskItem[]> {
+  const rows = await prisma.personalTask.findMany({
+    where: { userId },
+    orderBy: [
+      { isPinned: "desc" },
+      { status: "asc" },
+      { dueDate: "asc" },
+      { updatedAt: "desc" },
+    ],
+  });
+
+  return rows.map((row) => {
+    const checklist: PersonalChecklistItem[] = Array.isArray(row.checklist)
+      ? (row.checklist as unknown as PersonalChecklistItem[]).map((item) => ({
+          id: String(item.id),
+          title: String(item.title),
+          completed: Boolean(item.completed),
+        }))
+      : [];
+
+    return {
+      id: row.id,
+      title: row.title,
+      notes: row.notes,
+      status: row.status,
+      priority: row.priority,
+      category: row.category,
+      dueDate: row.dueDate?.toISOString() ?? null,
+      isPinned: row.isPinned,
+      checklist,
+      completedAt: row.completedAt?.toISOString() ?? null,
+      userId: row.userId,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  });
+}
 
 const userSelect = {
   id: true,

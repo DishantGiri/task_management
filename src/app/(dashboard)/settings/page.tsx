@@ -5,7 +5,7 @@ import { SettingsClient } from "@/components/settings/settings-client";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?reauth=1");
 
   const [departments, tags] = await Promise.all([
     prisma.department.findMany({

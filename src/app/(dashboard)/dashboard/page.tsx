@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/permissions";
 import { getDashboardData } from "@/lib/queries";
+import { prisma } from "@/lib/prisma";
 import {
   cn,
   formatCompactDate,
@@ -33,9 +34,16 @@ import {
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?reauth=1");
 
-  const data = await getDashboardData(user);
+  const [data, pendingApprovalCount] = await Promise.all([
+    getDashboardData(user),
+    user.role === "ADMIN"
+      ? prisma.user.count({
+          where: { status: { in: ["PENDING", "INVITED"] } },
+        })
+      : Promise.resolve(0),
+  ]);
 
   const kpis = [
     {
@@ -85,6 +93,32 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Admin Alert Banner for Pending Google Logins On Hold */}
+      {user.role === "ADMIN" && pendingApprovalCount > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs shadow-subtle">
+          <div className="flex items-center gap-2.5">
+            <Clock className="h-4 w-4 shrink-0 text-[#F59E0B]" />
+            <span className="text-[#20232B]">
+              <strong>
+                {pendingApprovalCount}{" "}
+                {pendingApprovalCount === 1
+                  ? "employee account is"
+                  : "employee accounts are"}{" "}
+                on hold
+              </strong>{" "}
+              awaiting your approval and role assignment after Google sign-in.
+            </span>
+          </div>
+          <Link
+            href="/team?status=PENDING"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#20232B] px-3 text-xs font-medium text-white hover:bg-[#374151] shrink-0"
+          >
+            Review &amp; Assign Roles
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>

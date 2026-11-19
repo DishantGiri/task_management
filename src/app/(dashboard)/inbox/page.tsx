@@ -8,7 +8,7 @@ import { InboxClient } from "@/components/tasks/inbox-client";
 
 export default async function InboxPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?reauth=1");
 
   await syncUpcomingDeadlineNotifications(user.id);
 

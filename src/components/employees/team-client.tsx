@@ -3,17 +3,24 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  CheckCircle2,
+  Clock,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Power,
   Search,
   ShieldCheck,
+  UserCheck,
   UserPlus,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Role } from "@prisma/client";
-import { toggleEmployeeStatusAction } from "@/actions/employees";
+import {
+  approveEmployeeAction,
+  toggleEmployeeStatusAction,
+} from "@/actions/employees";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -53,12 +60,31 @@ export function TeamClient({
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [deptFilter, setDeptFilter] = useState("ALL");
   const [roleFilter, setRoleFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState(
+    searchParams.get("status") || "ALL"
+  );
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<EmployeeRow | null>(null);
 
+  // Per-user role & department selection in the Pending Approvals queue
+  const [pendingRoleMap, setPendingRoleMap] = useState<Record<string, Role>>(
+    {}
+  );
+  const [pendingDeptMap, setPendingDeptMap] = useState<Record<string, string>>(
+    {}
+  );
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
   const isAdmin = currentUserRole === "ADMIN";
+
+  const pendingEmployees = useMemo(
+    () =>
+      employees.filter(
+        (e) => e.status === "PENDING" || e.status === "INVITED"
+      ),
+    [employees]
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -78,6 +104,32 @@ export function TeamClient({
     });
   }, [employees, search, deptFilter, roleFilter, statusFilter]);
 
+  const handleApproveUser = async (emp: EmployeeRow) => {
+    const chosenRole = pendingRoleMap[emp.id] || emp.role || "EMPLOYEE";
+    const chosenDept =
+      pendingDeptMap[emp.id] !== undefined
+        ? pendingDeptMap[emp.id]
+        : emp.departmentId || "";
+
+    setApprovingId(emp.id);
+    const res = await approveEmployeeAction({
+      userId: emp.id,
+      role: chosenRole,
+      departmentId: chosenDept || null,
+    });
+    setApprovingId(null);
+
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+
+    toast.success(
+      `Approved ${emp.name} as ${chosenRole}. They can now access the dashboard.`
+    );
+    router.refresh();
+  };
+
   const handleToggleStatus = async (emp: EmployeeRow) => {
     const res = await toggleEmployeeStatusAction(emp.id);
     if (res.error) {
@@ -87,7 +139,7 @@ export function TeamClient({
     toast.success(
       res.status === "INACTIVE"
         ? `Deactivated ${emp.name}`
-        : `Reactivated ${emp.name}`
+        : `Activated ${emp.name}`
     );
     router.refresh();
   };
@@ -106,7 +158,7 @@ export function TeamClient({
             Team &amp; Employees
           </h1>
           <p className="text-[13px] text-[#737987] mt-0.5">
-            Organization directory, departments, access roles, and workload visibility.
+            Approve Google sign-ins, assign roles, and manage organization workload.
           </p>
         </div>
 
@@ -119,13 +171,142 @@ export function TeamClient({
             }}
           >
             <UserPlus className="h-4 w-4" />
-            Invite Employee
+            Pre-Approve Gmail User
           </Button>
         )}
       </div>
 
+      {/* Admin Approval Queue Banner for Users On Hold */}
+      {isAdmin && pendingEmployees.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50/70 p-4 shadow-subtle space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-500 text-white">
+                <Clock className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-[14px] font-semibold text-[#20232B]">
+                  Pending Account Approvals ({pendingEmployees.length} On Hold)
+                </h2>
+                <p className="text-xs text-[#525866]">
+                  These team members signed in with Google and are waiting on
+                  hold. Assign their role and click{" "}
+                  <strong>Approve &amp; Grant Access</strong> to unlock their
+                  dashboard.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white">
+            {pendingEmployees.map((emp) => {
+              const selectedRole =
+                pendingRoleMap[emp.id] || emp.role || "EMPLOYEE";
+              const selectedDept =
+                pendingDeptMap[emp.id] !== undefined
+                  ? pendingDeptMap[emp.id]
+                  : emp.departmentId || "__none__";
+
+              return (
+                <div
+                  key={emp.id}
+                  className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <UserAvatar
+                      name={emp.name}
+                      avatarUrl={emp.avatarUrl}
+                      size="md"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-[13.5px] text-[#20232B] truncate">
+                          {emp.name}
+                        </p>
+                        <span className="inline-flex items-center gap-1 rounded-[4px] border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-800">
+                          On Hold
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#737987] truncate">
+                        {emp.email}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={selectedDept}
+                      onValueChange={(v) =>
+                        setPendingDeptMap((prev) => ({
+                          ...prev,
+                          [emp.id]: v === "__none__" ? "" : v,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-[148px] text-xs">
+                        <SelectValue placeholder="Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No Department</SelectItem>
+                        {departments.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={selectedRole}
+                      onValueChange={(v) =>
+                        setPendingRoleMap((prev) => ({
+                          ...prev,
+                          [emp.id]: v as Role,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-[135px] text-xs font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="EMPLOYEE">Role: Employee</SelectItem>
+                        <SelectItem value="MANAGER">Role: Manager</SelectItem>
+                        <SelectItem value="ADMIN">Role: Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      size="sm"
+                      className="h-8 bg-[#16A34A] hover:bg-[#15803D] text-white"
+                      disabled={approvingId === emp.id}
+                      onClick={() => handleApproveUser(emp)}
+                    >
+                      {approvingId === emp.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      )}
+                      Approve &amp; Grant Access
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                      onClick={() => handleToggleStatus(emp)}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Compact Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
           <div className="flex items-center justify-between text-xs text-[#737987]">
             <span>Total Directory</span>
@@ -137,11 +318,20 @@ export function TeamClient({
         </div>
         <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
           <div className="flex items-center justify-between text-xs text-[#737987]">
-            <span>Active Accounts</span>
+            <span>Approved &amp; Active</span>
             <span className="h-2.5 w-2.5 rounded-full bg-[#16A34A]" />
           </div>
           <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
             {activeCount}
+          </p>
+        </div>
+        <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
+          <div className="flex items-center justify-between text-xs text-[#737987]">
+            <span>On Hold (Pending)</span>
+            <Clock className="h-4 w-4 text-[#F59E0B]" />
+          </div>
+          <p className="mt-1.5 text-2xl font-semibold text-[#F59E0B]">
+            {pendingEmployees.length}
           </p>
         </div>
         <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
@@ -195,14 +385,14 @@ export function TeamClient({
         </Select>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-8 w-[130px] text-xs">
+          <SelectTrigger className="h-8 w-[150px] text-xs">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Statuses</SelectItem>
-            <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="INVITED">Invited</SelectItem>
-            <SelectItem value="INACTIVE">Inactive</SelectItem>
+            <SelectItem value="ACTIVE">Approved (Active)</SelectItem>
+            <SelectItem value="PENDING">On Hold (Pending)</SelectItem>
+            <SelectItem value="INACTIVE">Deactivated</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -216,10 +406,12 @@ export function TeamClient({
                 <th className="py-2.5 pl-4 pr-3">Employee</th>
                 <th className="py-2.5 px-3">Department</th>
                 <th className="py-2.5 px-3">Role</th>
-                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3">Access Status</th>
                 <th className="py-2.5 px-3">Workload</th>
                 <th className="py-2.5 px-3">Projects</th>
-                {isAdmin && <th className="py-2.5 pl-3 pr-4 text-right">Actions</th>}
+                {isAdmin && (
+                  <th className="py-2.5 pl-3 pr-4 text-right">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EAECF0] text-[13px]">
@@ -241,11 +433,16 @@ export function TeamClient({
                             100
                         )
                       : 0;
+                  const isPending =
+                    emp.status === "PENDING" || emp.status === "INVITED";
 
                   return (
                     <tr
                       key={emp.id}
-                      className="hover:bg-[#F7F8FA]/80 transition-colors"
+                      className={cn(
+                        "hover:bg-[#F7F8FA]/80 transition-colors",
+                        isPending && "bg-amber-50/30"
+                      )}
                     >
                       <td className="py-3 pl-4 pr-3">
                         <div className="flex items-center gap-3">
@@ -286,8 +483,8 @@ export function TeamClient({
                             "inline-flex items-center gap-1.5 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium",
                             emp.status === "ACTIVE"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : emp.status === "INVITED"
-                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : isPending
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
                               : "border-zinc-200 bg-zinc-100 text-zinc-600"
                           )}
                         >
@@ -296,16 +493,16 @@ export function TeamClient({
                               "h-1.5 w-1.5 rounded-full",
                               emp.status === "ACTIVE"
                                 ? "bg-emerald-500"
-                                : emp.status === "INVITED"
+                                : isPending
                                 ? "bg-amber-500"
                                 : "bg-zinc-400"
                             )}
                           />
                           {emp.status === "ACTIVE"
-                            ? "Active"
-                            : emp.status === "INVITED"
-                            ? "Invited"
-                            : "Inactive"}
+                            ? "Approved"
+                            : isPending
+                            ? "On Hold (Pending)"
+                            : "Deactivated"}
                         </span>
                       </td>
 
@@ -334,11 +531,24 @@ export function TeamClient({
                         <td className="py-3 pl-3 pr-4 text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                              >
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              {isPending && (
+                                <DropdownMenuItem
+                                  onClick={() => handleApproveUser(emp)}
+                                  className="text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                                >
+                                  <UserCheck className="h-3.5 w-3.5" />
+                                  Approve &amp; Activate
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onClick={() => {
                                   setEditing(emp);
@@ -346,7 +556,7 @@ export function TeamClient({
                                 }}
                               >
                                 <Pencil className="h-3.5 w-3.5 text-[#737987]" />
-                                Edit Profile &amp; Role
+                                Assign Role &amp; Edit
                               </DropdownMenuItem>
                               {emp.id !== currentUserId && (
                                 <DropdownMenuItem

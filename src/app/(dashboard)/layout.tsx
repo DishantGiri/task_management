@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/permissions";
+import { getAuthenticatedUser } from "@/lib/permissions";
 import { getWorkspaceReferenceData } from "@/lib/queries";
 import { AppShell } from "@/components/layout/app-shell";
 
@@ -9,9 +9,14 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  const user = await getAuthenticatedUser();
   if (!user) {
-    redirect("/login");
+    redirect("/login?reauth=1");
+  }
+
+  // Place account on hold if not yet approved / active
+  if (user.status !== "ACTIVE") {
+    redirect("/pending-approval");
   }
 
   const [refData, unreadCount] = await Promise.all([

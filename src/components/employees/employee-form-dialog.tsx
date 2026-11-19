@@ -51,9 +51,8 @@ export interface EmployeeRow {
 const formSchema = z.object({
   name: z.string().min(2, "Full name is required"),
   email: z.string().email("Valid work email is required"),
-  password: z.string().optional(),
   role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]),
-  status: z.enum(["ACTIVE", "INACTIVE", "INVITED"]),
+  status: z.enum(["ACTIVE", "PENDING", "INACTIVE", "INVITED"]),
   departmentId: z.string().optional(),
   designation: z.string().optional(),
   avatarUrl: z.string().optional(),
@@ -86,7 +85,6 @@ export function EmployeeFormDialog({
     defaultValues: {
       name: "",
       email: "",
-      password: "",
       role: "EMPLOYEE",
       status: "ACTIVE",
       departmentId: "",
@@ -101,7 +99,6 @@ export function EmployeeFormDialog({
       reset({
         name: editingEmployee.name,
         email: editingEmployee.email,
-        password: "",
         role: editingEmployee.role,
         status: editingEmployee.status,
         departmentId: editingEmployee.departmentId || "",
@@ -112,9 +109,8 @@ export function EmployeeFormDialog({
       reset({
         name: "",
         email: "",
-        password: "",
         role: "EMPLOYEE",
-        status: "INVITED",
+        status: "ACTIVE",
         departmentId: departments[0]?.id || "",
         designation: "",
         avatarUrl: "",
@@ -127,11 +123,6 @@ export function EmployeeFormDialog({
   const departmentId = watch("departmentId");
 
   const onSubmit = async (values: FormValues) => {
-    if (!editingEmployee && (!values.password || values.password.length < 8)) {
-      toast.error("Temporary password must be at least 8 characters");
-      return;
-    }
-
     const payload = {
       name: values.name,
       email: values.email,
@@ -140,7 +131,6 @@ export function EmployeeFormDialog({
       departmentId: values.departmentId || null,
       designation: values.designation || null,
       avatarUrl: values.avatarUrl || null,
-      password: values.password || "",
     };
 
     const res = editingEmployee
@@ -153,7 +143,9 @@ export function EmployeeFormDialog({
     }
 
     toast.success(
-      editingEmployee ? "Employee profile updated" : "Employee invited"
+      editingEmployee
+        ? "Employee profile & permissions updated"
+        : "Employee pre-authorized for Google sign-in"
     );
     onOpenChange(false);
     router.refresh();
@@ -164,12 +156,12 @@ export function EmployeeFormDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {editingEmployee ? "Edit Employee" : "Invite Employee"}
+            {editingEmployee ? "Edit Employee & Role" : "Pre-Approve Google Employee"}
           </DialogTitle>
           <DialogDescription>
             {editingEmployee
-              ? "Update profile details, department assignment, role, and account status."
-              : "Add a new team member with role-based permissions."}
+              ? "Assign role permissions, department, and approval status."
+              : "Pre-authorize a company Gmail account with an assigned role."}
           </DialogDescription>
         </DialogHeader>
 
@@ -188,11 +180,11 @@ export function EmployeeFormDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="emp-email">Work Email</Label>
+              <Label htmlFor="emp-email">Company Gmail / Email</Label>
               <Input
                 id="emp-email"
                 type="email"
-                placeholder="jordan@meridian.io"
+                placeholder="name@fishtailinfosolutions.com"
                 {...register("email")}
               />
               {errors.email && (
@@ -230,7 +222,7 @@ export function EmployeeFormDialog({
               <Label htmlFor="emp-desig">Designation</Label>
               <Input
                 id="emp-desig"
-                placeholder="Senior Software Engineer"
+                placeholder="Software Engineer"
                 {...register("designation")}
               />
             </div>
@@ -264,30 +256,12 @@ export function EmployeeFormDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ACTIVE">Active</SelectItem>
-                  <SelectItem value="INVITED">Invited</SelectItem>
-                  <SelectItem value="INACTIVE">Inactive</SelectItem>
+                  <SelectItem value="ACTIVE">Approved (Active)</SelectItem>
+                  <SelectItem value="PENDING">On Hold (Pending Approval)</SelectItem>
+                  <SelectItem value="INACTIVE">Deactivated (Blocked)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="emp-pass">
-              {editingEmployee
-                ? "Reset Password (optional)"
-                : "Temporary Password"}
-            </Label>
-            <Input
-              id="emp-pass"
-              type="password"
-              placeholder={
-                editingEmployee
-                  ? "Leave blank to keep current password"
-                  : "Minimum 8 characters"
-              }
-              {...register("password")}
-            />
           </div>
 
           <div className="space-y-1.5">
@@ -310,7 +284,7 @@ export function EmployeeFormDialog({
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {editingEmployee ? "Save Changes" : "Invite Employee"}
+              {editingEmployee ? "Save Changes" : "Add & Authorize"}
             </Button>
           </DialogFooter>
         </form>

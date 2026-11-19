@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { isAfter, isBefore, isToday, startOfDay } from "date-fns";
 import {
   AlertTriangle,
+  BookmarkCheck,
+  Briefcase,
   CalendarDays,
   CheckCircle2,
   Circle,
@@ -14,7 +16,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Role, TaskStatus } from "@prisma/client";
-import type { TagSummary, TaskListItem, UserSummary } from "@/types";
+import type {
+  PersonalTaskItem,
+  TagSummary,
+  TaskListItem,
+  UserSummary,
+} from "@/types";
 import { updateTaskAction } from "@/actions/tasks";
 import { cn, formatCompactDate, isTaskOverdue } from "@/lib/utils";
 import { PriorityBadge } from "@/components/shared/badges";
@@ -28,21 +35,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TaskDetailDrawer } from "@/components/tasks/task-detail-drawer";
+import { PersonalTasksClient } from "@/components/tasks/personal-tasks-client";
 
 export function MyTasksClient({
   initialTasks,
+  initialPersonalTasks = [],
   users,
   tags,
   currentUserId,
   currentUserRole,
 }: {
   initialTasks: TaskListItem[];
+  initialPersonalTasks?: PersonalTaskItem[];
   users: UserSummary[];
   tags: TagSummary[];
   currentUserId: string;
   currentUserRole: Role;
 }) {
   const router = useRouter();
+  const [scope, setScope] = useState<"assigned" | "personal">("assigned");
   const [tasks, setTasks] = useState(initialTasks);
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
@@ -238,6 +249,42 @@ export function MyTasksClient({
 
   return (
     <div className="space-y-5">
+      {/* Scope Switcher: Assigned Company Tasks vs Personal Tasks */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EAECF0] pb-3">
+        <div className="inline-flex rounded-md border border-[#EAECF0] bg-white p-0.5 shadow-subtle">
+          <button
+            type="button"
+            onClick={() => setScope("assigned")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-colors",
+              scope === "assigned"
+                ? "bg-[#F0EFFF] text-[#5148C9]"
+                : "text-[#737987] hover:text-[#20232B]"
+            )}
+          >
+            <Briefcase className="h-3.5 w-3.5" />
+            Assigned Project Tasks ({tasks.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope("personal")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-colors",
+              scope === "personal"
+                ? "bg-[#F0EFFF] text-[#5148C9]"
+                : "text-[#737987] hover:text-[#20232B]"
+            )}
+          >
+            <BookmarkCheck className="h-3.5 w-3.5" />
+            Personal To-Dos ({initialPersonalTasks.length})
+          </button>
+        </div>
+      </div>
+
+      {scope === "personal" ? (
+        <PersonalTasksClient initialTasks={initialPersonalTasks} />
+      ) : (
+        <>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
@@ -369,6 +416,8 @@ export function MyTasksClient({
         users={users}
         tags={tags}
       />
+        </>
+      )}
     </div>
   );
 }

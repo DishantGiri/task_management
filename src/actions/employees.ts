@@ -5,9 +5,11 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   createActivityLog,
+  createNotification,
   requireAuth,
   requireRole,
 } from "@/lib/permissions";
+import type { Role } from "@prisma/client";
 import {
   departmentCreateSchema,
   employeeCreateSchema,
@@ -31,7 +33,9 @@ export async function createEmployeeAction(values: unknown) {
       return { error: "An employee with this email already exists." };
     }
 
-    const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+    const passwordHash = parsed.data.password
+      ? await bcrypt.hash(parsed.data.password, 12)
+      : "";
 
     const created = await prisma.user.create({
       data: {
@@ -152,6 +156,75 @@ export async function toggleEmployeeStatusAction(userId: string) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Action failed";
     if (message === "FORBIDDEN") return { error: "Only Admins can change account status." };
+    return { error: message };
+  }
+}
+
+export async function approveEmployeeAction(params: {
+  userId: string;
+  role: Role;
+  departmentId?: string | null;
+  designation?: string | null;
+}) {
+  try {
+    const actor = await requireRole(["ADMIN"]);
+    const target = await prisma.user.findUnique({
+      where: { id: params.userId },
+    });
+    if (!target) {
+      return { error: "User not found." };
+    }
+
+    const nextDesignation =
+      params.designation?.trim() ||
+      (target.designation &&
+      target.designation !== "Awaiting Admin Approval" &&
+      target.designation !== "Pending Approval"
+        ? target.designation
+        : params.role === "ADMIN"
+        ? "Administrator"
+        : params.role === "MANAGER"
+        ? "Project Manager"
+        : "Team Member");
+
+    const updated = await prisma.user.update({
+      where: { id: params.userId },
+      data: {
+        role: params.role,
+        status: "ACTIVE",
+        departmentId:
+          params.departmentId !== undefined
+            ? params.departmentId || null
+            : target.departmentId,
+        designation: nextDesignation,
+      },
+    });
+
+    await createActivityLog({
+      action: "USER_APPROVED",
+      entityType: "USER",
+      entityId: updated.id,
+      description: `approved ${updated.name} and assigned role ${updated.role}`,
+      actorId: actor.id,
+    });
+
+    await createNotification({
+      userId: updated.id,
+      actorId: actor.id,
+      type: "PROJECT_ADDED",
+      title: "Account Approved!",
+      message: `${actor.name} approved your account and assigned you the ${updated.role} role.`,
+      link: "/dashboard",
+    });
+
+    revalidatePath("/team");
+    revalidatePath("/dashboard");
+    revalidatePath("/pending-approval");
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to approve user";
+    if (message === "FORBIDDEN")
+      return { error: "Only Admins can approve accounts and assign roles." };
     return { error: message };
   }
 }

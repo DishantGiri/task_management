@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/permissions";
+import { getAuthenticatedUser } from "@/lib/permissions";
 
 export default async function HomePage() {
-  const user = await getCurrentUser();
-  if (user) {
-    redirect("/dashboard");
+  const user = await getAuthenticatedUser();
+  if (!user) {
+    redirect("/login");
   }
-  redirect("/login");
+  if (user.status !== "ACTIVE") {
+    redirect("/pending-approval");
+  }
+  redirect("/dashboard");
 }

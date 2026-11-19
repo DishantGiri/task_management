@@ -15,6 +15,7 @@ enum Role {
 
 enum UserStatus {
   ACTIVE
+  PENDING
   INACTIVE
   INVITED
 }
@@ -75,11 +76,11 @@ model User {
   id           String     @id @default(cuid())
   name         String
   email        String     @unique
-  passwordHash String
+  passwordHash String     @default("")
   avatarUrl    String?    @db.Text
   designation  String?
   role         Role       @default(EMPLOYEE)
-  status       UserStatus @default(ACTIVE)
+  status       UserStatus @default(PENDING)
   departmentId String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt

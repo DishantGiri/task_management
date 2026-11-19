@@ -1,23 +1,35 @@
 import { auth } from "@/lib/auth";
+import { SUPER_ADMIN_EMAIL } from "@/lib/auth/auth.config";
 import { prisma } from "@/lib/prisma";
-import type { NotificationType, Role, TaskStatus } from "@prisma/client";
+import type {
+  NotificationType,
+  Role,
+  TaskStatus,
+  UserStatus,
+} from "@prisma/client";
 
 export interface SessionUser {
   id: string;
   name: string;
   email: string;
   role: Role;
+  status: UserStatus;
   designation: string | null;
   avatarUrl: string | null;
   departmentId: string | null;
 }
 
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export async function getAuthenticatedUser(): Promise<SessionUser | null> {
   const session = await auth();
-  if (!session?.user?.id) return null;
+  const sessionId = session?.user?.id;
+  const sessionEmail = session?.user?.email?.toLowerCase().trim();
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: session.user.id },
+  if (!sessionId && !sessionEmail) return null;
+
+  let dbUser = await prisma.user.findFirst({
+    where: sessionId
+      ? { OR: [{ id: sessionId }, ...(sessionEmail ? [{ email: sessionEmail }] : [])] }
+      : { email: sessionEmail },
     select: {
       id: true,
       name: true,
@@ -30,19 +42,65 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     },
   });
 
-  if (!dbUser || dbUser.status === "INACTIVE") {
-    return null;
+  if (!dbUser && sessionEmail) {
+    const isSuper = sessionEmail === SUPER_ADMIN_EMAIL;
+    dbUser = await prisma.user.create({
+      data: {
+        name: session?.user?.name || sessionEmail.split("@")[0],
+        email: sessionEmail,
+        passwordHash: "",
+        avatarUrl: session?.user?.avatarUrl || null,
+        role: isSuper ? "ADMIN" : "EMPLOYEE",
+        status: isSuper ? "ACTIVE" : "PENDING",
+        designation: isSuper
+          ? "Company Administrator"
+          : "Awaiting Admin Approval",
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        designation: true,
+        avatarUrl: true,
+        departmentId: true,
+      },
+    });
   }
 
-  return {
-    id: dbUser.id,
-    name: dbUser.name,
-    email: dbUser.email,
-    role: dbUser.role,
-    designation: dbUser.designation,
-    avatarUrl: dbUser.avatarUrl,
-    departmentId: dbUser.departmentId,
-  };
+  if (!dbUser) return null;
+
+  // Ensure dishantgiri@fishtailinfosolutions.com is always ADMIN + ACTIVE
+  if (
+    dbUser.email.toLowerCase() === SUPER_ADMIN_EMAIL &&
+    (dbUser.role !== "ADMIN" || dbUser.status !== "ACTIVE")
+  ) {
+    dbUser = await prisma.user.update({
+      where: { id: dbUser.id },
+      data: { role: "ADMIN", status: "ACTIVE" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        designation: true,
+        avatarUrl: true,
+        departmentId: true,
+      },
+    });
+  }
+
+  return dbUser;
+}
+
+export async function getCurrentUser(): Promise<SessionUser | null> {
+  const user = await getAuthenticatedUser();
+  if (!user || user.status !== "ACTIVE") {
+    return null;
+  }
+  return user;
 }
 
 export async function requireAuth(): Promise<SessionUser> {

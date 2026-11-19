@@ -5,7 +5,7 @@ import { ProjectsListClient } from "@/components/projects/projects-list-client";
 
 export default async function ProjectsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?reauth=1");
 
   const [projects, ref] = await Promise.all([
     getProjectsList(user),

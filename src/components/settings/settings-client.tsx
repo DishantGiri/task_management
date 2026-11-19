@@ -232,37 +232,21 @@ export function SettingsClient({
         <TabsContent value="security">
           <Card>
             <CardHeader>
-              <CardTitle>Change Password</CardTitle>
+              <CardTitle>Google OAuth 2.0 Authentication</CardTitle>
               <CardDescription>
-                Keep your workspace account secure with a strong password.
+                Your workspace uses Google single sign-on (SSO) and administrator role approval.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cur-pass">Current Password</Label>
-                  <Input
-                    id="cur-pass"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="new-pass">New Password</Label>
-                  <Input
-                    id="new-pass"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimum 8 characters"
-                  />
-                </div>
-                <Button type="submit" disabled={savingPassword}>
-                  {savingPassword && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Update Password
-                </Button>
-              </form>
+            <CardContent className="space-y-3 text-xs text-[#525866]">
+              <div className="rounded-lg border border-[#EAECF0] bg-[#F7F8FA] p-4 space-y-1.5">
+                <p className="font-semibold text-[#20232B]">
+                  Connected Google Account: {user.email}
+                </p>
+                <p className="text-[#737987]">
+                  Password authentication is disabled for this organization. Manage your
+                  2-Step Verification and security settings directly in your Google Account.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  BookmarkCheck,
   Calendar,
   CheckCheck,
   CheckSquare,
@@ -82,6 +83,7 @@ interface SearchResults {
 const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Tasks", href: "/my-tasks", icon: CheckSquare },
+  { label: "Personal Tasks", href: "/personal-tasks", icon: BookmarkCheck },
   { label: "Inbox", href: "/inbox", icon: Inbox, showBadge: true },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "All Tasks", href: "/tasks", icon: ListTodo },
@@ -211,21 +213,21 @@ export function AppShell({
       >
         <Link
           href="/dashboard"
-          className="flex items-center gap-2.5 min-w-0"
+          className="flex items-center gap-2 min-w-0"
           onClick={() => isMobile && setMobileOpen(false)}
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#635BDB] text-white">
-            <Layers className="h-4 w-4" />
-          </div>
-          {(!collapsed || isMobile) && (
-            <div className="min-w-0">
-              <div className="truncate text-[14px] font-semibold tracking-tight text-[#20232B]">
-                Meridian
-              </div>
-              <div className="truncate text-[11px] text-[#737987] leading-tight">
-                Acme Enterprise
-              </div>
-            </div>
+          {collapsed && !isMobile ? (
+            <img
+              src="/logo-icon.png"
+              alt="Meridian"
+              className="h-7 w-auto object-contain shrink-0"
+            />
+          ) : (
+            <img
+              src="/logo.png"
+              alt="Meridian — Acme Enterprise"
+              className="h-9 w-auto max-w-[168px] object-contain"
+            />
           )}
         </Link>
 
@@ -369,11 +371,11 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-[#F7F8FA]">
-      {/* Desktop Sidebar */}
+    <div className="flex h-screen overflow-hidden bg-[#F7F8FA]">
+      {/* Desktop Sticky / Fixed-Viewport Sidebar */}
       <aside
         className={cn(
-          "hidden lg:block shrink-0 border-r border-[#EAECF0] bg-white transition-[width] duration-200 sticky top-0 h-screen",
+          "hidden lg:flex h-screen shrink-0 flex-col border-r border-[#EAECF0] bg-white transition-[width] duration-200 z-30",
           collapsed ? "w-[64px]" : "w-[244px]"
         )}
       >
@@ -388,10 +390,10 @@ export function AppShell({
         </SheetContent>
       </Sheet>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 flex-col min-w-0">
+      {/* Main Content Area (independently scrollable so sidebar stays locked) */}
+      <div className="flex flex-1 flex-col min-w-0 h-screen overflow-y-auto">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-[60px] items-center justify-between gap-3 border-b border-[#EAECF0] bg-white/95 backdrop-blur px-4 lg:px-7">
+        <header className="sticky top-0 z-30 flex h-[60px] shrink-0 items-center justify-between gap-3 border-b border-[#EAECF0] bg-white/95 backdrop-blur px-4 lg:px-7">
           <div className="flex items-center gap-3 flex-1 max-w-md">
             <Button
               variant="ghost"
@@ -668,7 +670,11 @@ export function AppShell({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                  onClick={() => logoutAction()}
+                  onSelect={async (e) => {
+                    e.preventDefault();
+                    await logoutAction();
+                    window.location.href = "/login";
+                  }}
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   Sign out

@@ -18,7 +18,7 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?reauth=1");
 
   const { id } = await params;
   const hasAccess = await canAccessProject(user, id);

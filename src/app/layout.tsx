@@ -1,19 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: "Meridian — Company Work Management",
   description:
-    "Modern enterprise work management platform for projects, tasks, subtasks, teams, and delivery insights.",
+    "Modern enterprise work management platform for projects, tasks, personal tasks, subtasks, teams, and delivery insights.",
+  icons: {
+    icon: "/logo-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -22,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en">
       <body className="font-sans min-h-screen bg-[#F7F8FA] text-[#20232B]">
         <TooltipProvider delayDuration={200}>
           {children}
