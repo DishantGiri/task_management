@@ -18,7 +18,37 @@ const adapter = new PrismaMariaDb({
 
 const prisma = new PrismaClient({ adapter });
 
+const DEPARTMENTS = [
+  {
+    name: "SEO",
+    description: "Search engine optimization, organic growth, and content visibility.",
+  },
+  {
+    name: "Video Generation",
+    description: "Video production, AI video generation, and multimedia creative.",
+  },
+  {
+    name: "Developement",
+    description: "Software development, web applications, and engineering.",
+  },
+];
+
 async function main() {
+  for (const dept of DEPARTMENTS) {
+    await prisma.department.upsert({
+      where: { name: dept.name },
+      update: { description: dept.description },
+      create: {
+        name: dept.name,
+        description: dept.description,
+      },
+    });
+  }
+
+  console.log(
+    `Departments seeded: ${DEPARTMENTS.map((d) => d.name).join(", ")}`
+  );
+
   const admin = await prisma.user.upsert({
     where: { email: "dishantgiri@fishtailinfosolutions.com" },
     update: {
