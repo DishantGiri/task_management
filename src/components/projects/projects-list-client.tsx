@@ -50,11 +50,13 @@ import { ProjectFormDialog } from "@/components/projects/project-form-dialog";
 export function ProjectsListClient({
   projects,
   users,
+  departments = [],
   currentUserId,
   currentUserRole,
 }: {
   projects: ProjectListItem[];
   users: UserSummary[];
+  departments?: { id: string; name: string }[];
   currentUserId: string;
   currentUserRole: Role;
 }) {
@@ -315,6 +317,7 @@ export function ProjectsListClient({
         open={formOpen}
         onOpenChange={setFormOpen}
         users={users}
+        departments={departments}
         currentUserId={currentUserId}
         currentUserRole={currentUserRole}
         editingProject={editing}

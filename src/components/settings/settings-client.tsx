@@ -1,8 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, KeyRound, Loader2, Plus, Tag, Trash2, User } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  Check,
+  KeyRound,
+  Loader2,
+  Pencil,
+  Plus,
+  Tag,
+  Trash2,
+  User,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { SessionUser } from "@/lib/permissions";
 import {
@@ -11,6 +24,7 @@ import {
   createTagAction,
   deleteDepartmentAction,
   deleteTagAction,
+  updateDepartmentAction,
   updateProfileAction,
 } from "@/actions/employees";
 import { Button } from "@/components/ui/button";
@@ -46,6 +60,9 @@ export function SettingsClient({
   const [deptName, setDeptName] = useState("");
   const [deptDesc, setDeptDesc] = useState("");
   const [savingDept, setSavingDept] = useState(false);
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+  const [editDeptName, setEditDeptName] = useState("");
+  const [editDeptDesc, setEditDeptDesc] = useState("");
 
   // Tag form
   const [tagName, setTagName] = useState("");
@@ -105,6 +122,24 @@ export function SettingsClient({
       return;
     }
     toast.success("Department removed");
+    router.refresh();
+  };
+
+  const handleUpdateDept = async (id: string) => {
+    if (!editDeptName.trim()) return;
+    setSavingDept(true);
+    const res = await updateDepartmentAction({
+      id,
+      name: editDeptName.trim(),
+      description: editDeptDesc.trim() || null,
+    });
+    setSavingDept(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Department updated");
+    setEditingDeptId(null);
     router.refresh();
   };
 
@@ -254,11 +289,20 @@ export function SettingsClient({
         {isAdmin && (
           <TabsContent value="departments" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Company Departments</CardTitle>
-                <CardDescription>
-                  Organize employees into departments for filtering and reporting.
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Company Departments</CardTitle>
+                  <CardDescription>
+                    Create, rename, or remove departments and organize members.
+                  </CardDescription>
+                </div>
+                <Link
+                  href="/departments"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#EAECF0] bg-[#F7F8FA] px-3 text-xs font-medium text-[#20232B] hover:bg-[#F0EFFF] hover:text-[#5148C9]"
+                >
+                  Full Department Manager
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </CardHeader>
               <CardContent className="space-y-4">
                 <form
@@ -268,7 +312,7 @@ export function SettingsClient({
                   <Input
                     value={deptName}
                     onChange={(e) => setDeptName(e.target.value)}
-                    placeholder="Department name (e.g., Data Science)"
+                    placeholder="Department name (e.g., SEO)"
                     className="sm:w-56"
                   />
                   <Input
@@ -284,30 +328,89 @@ export function SettingsClient({
                 </form>
 
                 <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0]">
-                  {departments.map((d) => (
-                    <div
-                      key={d.id}
-                      className="flex items-center justify-between gap-3 px-4 py-3"
-                    >
-                      <div>
-                        <p className="text-[13px] font-medium text-[#20232B]">
-                          {d.name}
-                        </p>
-                        <p className="text-xs text-[#737987]">
-                          {d.description || "No description"} · {d._count.users}{" "}
-                          members
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-[#737987] hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteDept(d.id)}
+                  {departments.map((d) => {
+                    const isEditing = editingDeptId === d.id;
+                    return (
+                      <div
+                        key={d.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
+                        {isEditing ? (
+                          <div className="flex flex-1 flex-col sm:flex-row gap-2">
+                            <Input
+                              value={editDeptName}
+                              onChange={(e) => setEditDeptName(e.target.value)}
+                              className="h-8 sm:w-48 text-xs"
+                              placeholder="Department name"
+                            />
+                            <Input
+                              value={editDeptDesc}
+                              onChange={(e) => setEditDeptDesc(e.target.value)}
+                              className="h-8 flex-1 text-xs"
+                              placeholder="Description"
+                            />
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 px-2.5"
+                                disabled={savingDept}
+                                onClick={() => handleUpdateDept(d.id)}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Save
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setEditingDeptId(null)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <p className="text-[13px] font-medium text-[#20232B]">
+                                {d.name}
+                              </p>
+                              <p className="text-xs text-[#737987]">
+                                {d.description || "No description"} ·{" "}
+                                {d._count.users} members
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-[#737987]"
+                                onClick={() => {
+                                  setEditingDeptId(d.id);
+                                  setEditDeptName(d.name);
+                                  setEditDeptDesc(d.description || "");
+                                }}
+                                title="Edit department"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-[#737987] hover:text-red-600 hover:bg-red-50"
+                                onClick={() => handleDeleteDept(d.id)}
+                                title="Delete department"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>

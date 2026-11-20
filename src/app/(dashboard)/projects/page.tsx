@@ -16,6 +16,7 @@ export default async function ProjectsPage() {
     <ProjectsListClient
       projects={projects}
       users={ref.users}
+      departments={ref.departments}
       currentUserId={user.id}
       currentUserRole={user.role}
     />

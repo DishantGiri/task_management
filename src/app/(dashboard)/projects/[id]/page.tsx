@@ -47,6 +47,7 @@ export default async function ProjectDetailPage({
       project={project}
       tasks={tasks}
       allUsers={ref.users}
+      departments={ref.departments}
       tags={ref.tags}
       activities={activities.map((a) => ({
         ...a,

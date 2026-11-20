@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   BookmarkCheck,
+  Building2,
   Calendar,
   CheckCheck,
   CheckSquare,
@@ -89,6 +90,7 @@ const NAV_ITEMS = [
   { label: "All Tasks", href: "/tasks", icon: ListTodo },
   { label: "Calendar", href: "/calendar", icon: Calendar },
   { label: "Team", href: "/team", icon: Users },
+  { label: "Departments", href: "/departments", icon: Building2 },
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

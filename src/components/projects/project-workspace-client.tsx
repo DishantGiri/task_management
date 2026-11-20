@@ -1,14 +1,18 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowLeft,
+  Building2,
   Calendar,
+  Check,
   ListTodo,
+  Loader2,
   Pencil,
+  Search,
   UserMinus,
   UserPlus,
   Users,
@@ -23,9 +27,10 @@ import type {
 } from "@/types";
 import {
   addProjectMemberAction,
+  addProjectMembersBatchAction,
   removeProjectMemberAction,
 } from "@/actions/projects";
-import { formatRelativeTime, formatShortDate } from "@/lib/utils";
+import { cn, formatRelativeTime, formatShortDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -57,6 +62,7 @@ export function ProjectWorkspaceClient({
   project,
   tasks,
   allUsers,
+  departments = [],
   tags,
   activities,
   currentUserId,
@@ -66,6 +72,7 @@ export function ProjectWorkspaceClient({
   project: ProjectListItem;
   tasks: TaskListItem[];
   allUsers: UserSummary[];
+  departments?: { id: string; name: string }[];
   tags: TagSummary[];
   activities: ProjectActivityItem[];
   currentUserId: string;
@@ -74,19 +81,114 @@ export function ProjectWorkspaceClient({
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState("");
+
+  // Add members filter, search, and selection state
+  const [addSearch, setAddSearch] = useState("");
+  const [addDeptFilter, setAddDeptFilter] = useState("ALL");
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [selectedRole, setSelectedRole] = useState<ProjectMemberRole>("MEMBER");
   const [addingMember, setAddingMember] = useState(false);
 
-  const memberUserIds = new Set(project.members.map((m) => m.user.id));
-  const nonMembers = allUsers.filter((u) => !memberUserIds.has(u.id));
+  // Current members filter & search state
+  const [existingSearch, setExistingSearch] = useState("");
+  const [existingDeptFilter, setExistingDeptFilter] = useState("ALL");
 
-  const handleAddMember = async () => {
-    if (!selectedUserId) return;
+  const departmentOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of departments) {
+      map.set(d.id, d.name);
+    }
+    for (const u of allUsers) {
+      if (u.department?.id && u.department?.name) {
+        map.set(u.department.id, u.department.name);
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [departments, allUsers]);
+
+  const memberUserIds = useMemo(
+    () => new Set(project.members.map((m) => m.user.id)),
+    [project.members]
+  );
+
+  const nonMembers = useMemo(
+    () => allUsers.filter((u) => !memberUserIds.has(u.id)),
+    [allUsers, memberUserIds]
+  );
+
+  const filteredNonMembers = useMemo(() => {
+    const q = addSearch.trim().toLowerCase();
+    return nonMembers.filter((u) => {
+      if (addDeptFilter === "UNASSIGNED" && u.department?.id) return false;
+      if (
+        addDeptFilter !== "ALL" &&
+        addDeptFilter !== "UNASSIGNED" &&
+        u.department?.id !== addDeptFilter
+      ) {
+        return false;
+      }
+      if (q) {
+        const match =
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.designation || "").toLowerCase().includes(q) ||
+          (u.department?.name || "").toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [nonMembers, addSearch, addDeptFilter]);
+
+  const filteredExistingMembers = useMemo(() => {
+    const q = existingSearch.trim().toLowerCase();
+    return project.members.filter((m) => {
+      const u = m.user;
+      if (existingDeptFilter === "UNASSIGNED" && u.department?.id) return false;
+      if (
+        existingDeptFilter !== "ALL" &&
+        existingDeptFilter !== "UNASSIGNED" &&
+        u.department?.id !== existingDeptFilter
+      ) {
+        return false;
+      }
+      if (q) {
+        const match =
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.designation || "").toLowerCase().includes(q) ||
+          (u.department?.name || "").toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [project.members, existingSearch, existingDeptFilter]);
+
+  const toggleCandidate = (uid: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    );
+  };
+
+  const handleQuickAddSingle = async (uid: string) => {
     setAddingMember(true);
-    const res = await addProjectMemberAction(
+    const res = await addProjectMemberAction(project.id, uid, selectedRole);
+    setAddingMember(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    setSelectedUserIds((prev) => prev.filter((id) => id !== uid));
+    toast.success("Member added to project");
+    router.refresh();
+  };
+
+  const handleAddSelectedBatch = async (idsToUse?: string[]) => {
+    const ids = idsToUse || selectedUserIds;
+    if (ids.length === 0) return;
+    setAddingMember(true);
+    const res = await addProjectMembersBatchAction(
       project.id,
-      selectedUserId,
+      ids,
       selectedRole
     );
     setAddingMember(false);
@@ -94,8 +196,8 @@ export function ProjectWorkspaceClient({
       toast.error(res.error);
       return;
     }
-    toast.success("Member added to project");
-    setSelectedUserId("");
+    toast.success(`Added ${res.count} member(s) to project`);
+    setSelectedUserIds([]);
     router.refresh();
   };
 
@@ -153,7 +255,10 @@ export function ProjectWorkspaceClient({
                     avatarUrl={project.manager.avatarUrl}
                     size="xs"
                   />
-                  Lead: <strong className="text-[#20232B]">{project.manager.name}</strong>
+                  Lead:{" "}
+                  <strong className="text-[#20232B]">
+                    {project.manager.name}
+                  </strong>
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" />
@@ -237,93 +342,286 @@ export function ProjectWorkspaceClient({
         </TabsContent>
 
         <TabsContent value="members">
-          <div className="space-y-4 max-w-3xl">
-            {canManage && nonMembers.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-[#EAECF0] bg-white p-3.5 shadow-subtle">
-                <Select
-                  value={selectedUserId}
-                  onValueChange={setSelectedUserId}
-                >
-                  <SelectTrigger className="h-8 flex-1 min-w-[200px] text-xs">
-                    <SelectValue placeholder="Select employee to add..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {nonMembers.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.name} — {u.designation || u.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={selectedRole}
-                  onValueChange={(v) =>
-                    setSelectedRole(v as ProjectMemberRole)
-                  }
-                >
-                  <SelectTrigger className="h-8 w-[125px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="LEAD">Project Lead</SelectItem>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="VIEWER">Viewer</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  size="sm"
-                  className="h-8"
-                  disabled={!selectedUserId || addingMember}
-                  onClick={handleAddMember}
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Add Member
-                </Button>
-              </div>
-            )}
-
-            <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white shadow-subtle">
-              {project.members.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-center justify-between gap-3 px-4 py-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <UserAvatar
-                      name={m.user.name}
-                      avatarUrl={m.user.avatarUrl}
-                      size="md"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium text-[#20232B]">
-                        {m.user.name}
-                      </p>
-                      <p className="truncate text-xs text-[#737987]">
-                        {m.user.designation || m.user.email}
-                      </p>
-                    </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* Add Members Picker with Department Filter & Search */}
+            {canManage && (
+              <div className="lg:col-span-5 rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#20232B]">
+                      Add Team Members
+                    </h3>
+                    <p className="text-xs text-[#737987]">
+                      Filter by department or search employees to add.
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <span className="rounded-[5px] border border-[#EAECF0] bg-[#F7F8FA] px-2 py-0.5 text-[11px] font-medium text-[#4B5563]">
-                      {m.role}
-                    </span>
-                    <RoleBadge role={m.user.role} />
-                    {canManage && m.user.id !== project.managerId && (
+                  <Select
+                    value={selectedRole}
+                    onValueChange={(v) =>
+                      setSelectedRole(v as ProjectMemberRole)
+                    }
+                  >
+                    <SelectTrigger className="h-7 w-[118px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MEMBER">As Member</SelectItem>
+                      <SelectItem value="LEAD">As Lead</SelectItem>
+                      <SelectItem value="VIEWER">As Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Search & Department Filter */}
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+                    <input
+                      type="text"
+                      value={addSearch}
+                      onChange={(e) => setAddSearch(e.target.value)}
+                      placeholder="Search by name, email, role..."
+                      className="h-8 w-full rounded-md border border-[#E2E6EE] bg-[#F7F8FA] pl-8 pr-3 text-xs text-[#20232B] placeholder:text-[#9CA3AF] focus:border-[#635BDB] focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={addDeptFilter}
+                      onValueChange={setAddDeptFilter}
+                    >
+                      <SelectTrigger className="h-8 flex-1 text-xs">
+                        <Building2 className="h-3.5 w-3.5 mr-1.5 text-[#737987]" />
+                        <SelectValue placeholder="Filter by Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All Departments</SelectItem>
+                        {departmentOptions.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="UNASSIGNED">
+                          No Department
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {filteredNonMembers.length > 0 && (
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-[#737987] hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleRemoveMember(m.user.id)}
-                        title="Remove from project"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs shrink-0"
+                        disabled={addingMember}
+                        onClick={() =>
+                          handleAddSelectedBatch(
+                            filteredNonMembers.map((u) => u.id)
+                          )
+                        }
                       >
-                        <UserMinus className="h-3.5 w-3.5" />
+                        Add All ({filteredNonMembers.length})
                       </Button>
                     )}
                   </div>
                 </div>
-              ))}
+
+                {/* Available Employees List */}
+                <div className="max-h-[320px] overflow-y-auto divide-y divide-[#EAECF0] rounded-md border border-[#EAECF0]">
+                  {filteredNonMembers.length === 0 ? (
+                    <p className="py-8 text-center text-xs text-[#737987]">
+                      {nonMembers.length === 0
+                        ? "All workspace employees are already in this project."
+                        : "No available employees match this department or search."}
+                    </p>
+                  ) : (
+                    filteredNonMembers.map((u) => {
+                      const isChecked = selectedUserIds.includes(u.id);
+                      return (
+                        <div
+                          key={u.id}
+                          className={cn(
+                            "flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors hover:bg-[#F7F8FA]",
+                            isChecked && "bg-[#F0EFFF]/40"
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleCandidate(u.id)}
+                            className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+                          >
+                            <div
+                              className={cn(
+                                "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border",
+                                isChecked
+                                  ? "border-[#635BDB] bg-[#635BDB] text-white"
+                                  : "border-[#D1D5DB] bg-white"
+                              )}
+                            >
+                              {isChecked && (
+                                <Check className="h-3 w-3 stroke-[2.5]" />
+                              )}
+                            </div>
+                            <UserAvatar
+                              name={u.name}
+                              avatarUrl={u.avatarUrl}
+                              size="xs"
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-[#20232B]">
+                                {u.name}
+                              </p>
+                              <div className="flex items-center gap-1.5 text-[10.5px] text-[#737987]">
+                                <span className="truncate">
+                                  {u.department?.name || "No Dept"}
+                                </span>
+                                {u.designation && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="truncate">
+                                      {u.designation}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-[#635BDB] hover:bg-[#F0EFFF] hover:text-[#5148C9]"
+                            disabled={addingMember}
+                            onClick={() => handleQuickAddSingle(u.id)}
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Add
+                          </Button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {selectedUserIds.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    disabled={addingMember}
+                    onClick={() => handleAddSelectedBatch()}
+                  >
+                    {addingMember ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-3.5 w-3.5" />
+                    )}
+                    Add {selectedUserIds.length} Selected Member
+                    {selectedUserIds.length > 1 ? "s" : ""}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Current Project Members List with Search & Department Filter */}
+            <div
+              className={cn(
+                "space-y-3",
+                canManage ? "lg:col-span-7" : "lg:col-span-12 max-w-4xl"
+              )}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-[14px] font-semibold text-[#20232B]">
+                  Current Project Members ({filteredExistingMembers.length})
+                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-48">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+                    <input
+                      type="text"
+                      value={existingSearch}
+                      onChange={(e) => setExistingSearch(e.target.value)}
+                      placeholder="Filter current members..."
+                      className="h-8 w-full rounded-md border border-[#E2E6EE] bg-white pl-8 pr-3 text-xs focus:border-[#635BDB] focus:outline-none"
+                    />
+                  </div>
+                  <Select
+                    value={existingDeptFilter}
+                    onValueChange={setExistingDeptFilter}
+                  >
+                    <SelectTrigger className="h-8 w-[150px] text-xs bg-white">
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Departments</SelectItem>
+                      {departmentOptions.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="UNASSIGNED">No Department</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white shadow-subtle">
+                {filteredExistingMembers.length === 0 ? (
+                  <p className="py-10 text-center text-xs text-[#737987]">
+                    No project members match this filter.
+                  </p>
+                ) : (
+                  filteredExistingMembers.map((m) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center justify-between gap-3 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <UserAvatar
+                          name={m.user.name}
+                          avatarUrl={m.user.avatarUrl}
+                          size="md"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-[13px] font-medium text-[#20232B]">
+                              {m.user.name}
+                            </p>
+                            {m.user.department?.name && (
+                              <span className="rounded-[4px] border border-[#EAECF0] bg-[#F7F8FA] px-1.5 py-0.5 text-[10.5px] font-medium text-[#525866]">
+                                {m.user.department.name}
+                              </span>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-[#737987]">
+                            {m.user.designation
+                              ? `${m.user.designation} · ${m.user.email}`
+                              : m.user.email}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="rounded-[5px] border border-[#EAECF0] bg-[#F7F8FA] px-2 py-0.5 text-[11px] font-medium text-[#4B5563]">
+                          {m.role}
+                        </span>
+                        <RoleBadge role={m.user.role} />
+                        {canManage && m.user.id !== project.managerId && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-[#737987] hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleRemoveMember(m.user.id)}
+                            title="Remove from project"
+                          >
+                            <UserMinus className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </TabsContent>
@@ -367,6 +665,7 @@ export function ProjectWorkspaceClient({
           open={editOpen}
           onOpenChange={setEditOpen}
           users={allUsers}
+          departments={departments}
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}
           editingProject={project}
