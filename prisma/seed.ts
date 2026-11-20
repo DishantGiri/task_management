@@ -3,7 +3,8 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
 const rawUrl =
-  process.env.DATABASE_URL || "mysql://root:@127.0.0.1:3306/meridian_work";
+  process.env.DATABASE_URL ||
+  "mysql://root:vanxunipaxi@127.0.0.1:3306/meridian_work";
 const parsed = new URL(rawUrl);
 
 const adapter = new PrismaMariaDb({

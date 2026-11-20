@@ -10,6 +10,6 @@ export default defineConfig({
   datasource: {
     url:
       process.env.DATABASE_URL ||
-      "mysql://root:@127.0.0.1:3306/meridian_work",
+      "mysql://root:vanxunipaxi@127.0.0.1:3306/meridian_work",
   },
 });
