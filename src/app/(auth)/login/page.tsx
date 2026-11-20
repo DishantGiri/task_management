@@ -73,21 +73,35 @@ function LoginCard() {
   ) => {
     setMockLoading(roleKey);
     try {
-      const response = await fetch("/api/auth/mock-login", {
+      const response = await fetch("/api/mock-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roleKey }),
       });
-      const res = await response.json();
+
+      const rawText = await response.text();
+      let res: { success?: boolean; redirectTo?: string; error?: string } = {};
+      try {
+        res = JSON.parse(rawText);
+      } catch {
+        res = {
+          error: `Server returned HTTP ${response.status} (non-JSON response).`,
+        };
+      }
+
       if (!response.ok || res?.error) {
-        toast.error(res?.error || "Mock login failed. Please try again.");
+        toast.error(res?.error || `Mock login failed (HTTP ${response.status}).`);
         setMockLoading(null);
         return;
       }
       toast.success(`Signed in as ${roleKey}`);
       window.location.href = res?.redirectTo || "/dashboard";
-    } catch {
-      toast.error("Could not reach the server. Please try again.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? `Network error: ${err.message}`
+          : "Could not reach the server. Please try again."
+      );
       setMockLoading(null);
     }
   };

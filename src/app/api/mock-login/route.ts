@@ -8,6 +8,9 @@ import {
 } from "@/lib/auth/auth.config";
 import { invalidateWorkspaceCache } from "@/lib/cache/redis";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const MOCK_PROFILES = {
   ADMIN: {
     email: SUPER_ADMIN_EMAIL,
@@ -41,7 +44,7 @@ const MOCK_PROFILES = {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const roleKey = String(body?.roleKey || "").toUpperCase();
     const profile = MOCK_PROFILES[roleKey as keyof typeof MOCK_PROFILES];
 
@@ -106,7 +109,6 @@ export async function POST(request: NextRequest) {
       maxAge,
     });
 
-    // Clear any legacy cookie names
     response.cookies.delete("authjs.session-token");
     response.cookies.delete("__Secure-authjs.session-token");
 
