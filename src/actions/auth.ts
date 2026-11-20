@@ -21,7 +21,8 @@ export async function mockRoleLoginAction(
     };
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: "Mock login failed. Please try again." };
+      console.error("Mock role login AuthError:", error.type, error.message);
+      return { error: `Mock login failed (${error.type}). Please try again.` };
     }
     throw error;
   }

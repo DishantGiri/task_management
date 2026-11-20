@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   AtSign,
+  Building2,
   Calendar,
   Check,
   CheckCircle2,
@@ -328,6 +329,36 @@ export function TaskDetailDrawer({
     handleFieldUpdate({ collaboratorIds: next });
   };
 
+  const toggleDepartmentCollaborators = (deptUserIds: string[]) => {
+    if (!task) return;
+    const current = task.collaborators.map((c) => c.user.id);
+    const allSelected =
+      deptUserIds.length > 0 &&
+      deptUserIds.every((id) => current.includes(id));
+    const next = allSelected
+      ? current.filter((id) => !deptUserIds.includes(id))
+      : Array.from(new Set([...current, ...deptUserIds]));
+    handleFieldUpdate({ collaboratorIds: next });
+  };
+
+  const collaboratorDepartments = (() => {
+    const map = new Map<string, { id: string; name: string; userIds: string[] }>();
+    for (const u of users) {
+      if (u.id === task?.assigneeId) continue;
+      if (u.department?.id && u.department?.name) {
+        const entry = map.get(u.department.id);
+        if (entry) entry.userIds.push(u.id);
+        else
+          map.set(u.department.id, {
+            id: u.department.id,
+            name: u.department.name,
+            userIds: [u.id],
+          });
+      }
+    }
+    return Array.from(map.values());
+  })();
+
   const toggleTag = (tagId: string) => {
     if (!task) return;
     const current = task.tags.map((t) => t.tag.id);
@@ -597,43 +628,85 @@ export function TaskDetailDrawer({
                 {/* Collaborators & Tags */}
                 <div className="space-y-3">
                   {/* Collaborators */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#737987] w-28">
+                  <div className="flex flex-wrap items-start gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#737987] w-28 pt-1">
                       <Users className="h-3.5 w-3.5" /> Collaborators
                     </span>
-                    <div className="flex flex-wrap items-center gap-1.5 flex-1">
-                      {users
-                        .filter((u) => u.id !== task.assigneeId)
-                        .map((u) => {
-                          const active = task.collaborators.some(
-                            (c) => c.user.id === u.id
-                          );
-                          if (!canFullEdit && !active) return null;
-                          return (
-                            <button
-                              key={u.id}
-                              type="button"
-                              disabled={!canFullEdit}
-                              onClick={() => toggleCollaborator(u.id)}
-                              className={cn(
-                                "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                                active
-                                  ? "border-[#635BDB]/50 bg-[#F0EFFF] text-[#5148C9]"
-                                  : "border-[#EAECF0] bg-white text-[#737987] hover:bg-[#F7F8FA]"
-                              )}
-                            >
-                              <UserAvatar
-                                name={u.name}
-                                avatarUrl={u.avatarUrl}
-                                size="xs"
-                              />
-                              {u.name}
-                            </button>
-                          );
-                        })}
-                      {!canFullEdit && task.collaborators.length === 0 && (
-                        <span className="text-xs text-[#9CA3AF]">None</span>
+                    <div className="flex-1 space-y-2">
+                      {canFullEdit && collaboratorDepartments.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-[#737987]">
+                            <Building2 className="h-3 w-3" />
+                            By dept:
+                          </span>
+                          {collaboratorDepartments.map((dept) => {
+                            const currentIds = task.collaborators.map(
+                              (c) => c.user.id
+                            );
+                            const allSelected =
+                              dept.userIds.length > 0 &&
+                              dept.userIds.every((id) =>
+                                currentIds.includes(id)
+                              );
+                            return (
+                              <button
+                                key={dept.id}
+                                type="button"
+                                onClick={() =>
+                                  toggleDepartmentCollaborators(dept.userIds)
+                                }
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                                  allSelected
+                                    ? "border-[#635BDB] bg-[#635BDB] text-white"
+                                    : "border-[#D5D9E2] bg-[#F7F8FA] text-[#374151] hover:border-[#635BDB] hover:bg-[#F0EFFF] hover:text-[#5148C9]"
+                                )}
+                              >
+                                {allSelected ? (
+                                  <Check className="h-3 w-3" />
+                                ) : (
+                                  <Plus className="h-3 w-3" />
+                                )}
+                                All {dept.name} ({dept.userIds.length})
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {users
+                          .filter((u) => u.id !== task.assigneeId)
+                          .map((u) => {
+                            const active = task.collaborators.some(
+                              (c) => c.user.id === u.id
+                            );
+                            if (!canFullEdit && !active) return null;
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                disabled={!canFullEdit}
+                                onClick={() => toggleCollaborator(u.id)}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                                  active
+                                    ? "border-[#635BDB]/50 bg-[#F0EFFF] text-[#5148C9]"
+                                    : "border-[#EAECF0] bg-white text-[#737987] hover:bg-[#F7F8FA]"
+                                )}
+                              >
+                                <UserAvatar
+                                  name={u.name}
+                                  avatarUrl={u.avatarUrl}
+                                  size="xs"
+                                />
+                                {u.name}
+                              </button>
+                            );
+                          })}
+                        {!canFullEdit && task.collaborators.length === 0 && (
+                          <span className="text-xs text-[#9CA3AF]">None</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 

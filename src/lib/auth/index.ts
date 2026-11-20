@@ -163,7 +163,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user, account }) {
-      if (account?.provider === "mock-role") {
+      if (
+        account?.type === "credentials" ||
+        account?.provider === "mock-role" ||
+        account?.provider === "credentials"
+      ) {
         return !!user?.email;
       }
       if (account?.provider !== "google" || !user?.email) {
