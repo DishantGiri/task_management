@@ -39,68 +39,11 @@
     @apply border-border;
   }
 
-  html {
-    font-size: 17px;
-  }
-
+  html,
   body {
     @apply bg-[#F7F8FA] text-[#20232B] antialiased;
-    font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont,
-      "Segoe UI", Roboto, sans-serif;
-    font-size: 15px;
-    line-height: 1.55;
-    letter-spacing: -0.008em;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-}
-
-/* Scale up micro pixel font sizes globally for comfortable readability */
-.text-\[9px\],
-.text-\[10px\],
-.text-\[10\.5px\] {
-  font-size: 12.5px !important;
-  line-height: 1.4 !important;
-}
-
-.text-\[11px\],
-.text-\[11\.5px\] {
-  font-size: 13.5px !important;
-  line-height: 1.45 !important;
-}
-
-.text-\[12px\],
-.text-\[12\.5px\],
-.text-xs {
-  font-size: 14px !important;
-  line-height: 1.5 !important;
-}
-
-.text-\[13px\],
-.text-\[13\.5px\],
-.text-sm {
-  font-size: 15px !important;
-  line-height: 1.5 !important;
-}
-
-.text-\[14px\],
-.text-\[15px\] {
-  font-size: 16.5px !important;
-  line-height: 1.5 !important;
-}
-
-.text-\[18px\] {
-  font-size: 20px !important;
-  line-height: 1.4 !important;
-}
-
-.text-\[20px\],
-.text-\[22px\] {
-  font-size: 23px !important;
-  line-height: 1.35 !important;
-}
-
-.text-\[24px\] {
-  font-size: 27px !important;
-  line-height: 1.3 !important;
 }
 
 /* Refined scrollbars */
