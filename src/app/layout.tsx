@@ -19,6 +19,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="font-sans min-h-screen bg-[#F7F8FA] text-[#20232B]">
         <TooltipProvider delayDuration={200}>
           {children}
@@ -29,7 +41,8 @@ export default function RootLayout({
                 background: "#FFFFFF",
                 border: "1px solid #EAECF0",
                 color: "#20232B",
-                fontSize: "13px",
+                fontSize: "14.5px",
+                fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif',
               },
             }}
           />

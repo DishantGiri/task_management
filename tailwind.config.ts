@@ -10,7 +10,24 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        sans: [
+          '"Plus Jakarta Sans"',
+          '"DM Sans"',
+          "-apple-system",
+          "BlinkMacSystemFont",
+          '"Segoe UI"',
+          "Roboto",
+          "sans-serif",
+        ],
+        mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
+      },
+      fontSize: {
+        xs: ["0.84rem", { lineHeight: "1.25rem" }],
+        sm: ["0.94rem", { lineHeight: "1.4rem" }],
+        base: ["1.02rem", { lineHeight: "1.55rem" }],
+        lg: ["1.15rem", { lineHeight: "1.65rem" }],
+        xl: ["1.32rem", { lineHeight: "1.8rem" }],
+        "2xl": ["1.6rem", { lineHeight: "2.05rem" }],
       },
       colors: {
         background: "hsl(var(--background))",
