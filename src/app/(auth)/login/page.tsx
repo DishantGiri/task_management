@@ -12,7 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { googleLoginAction, mockRoleLoginAction } from "@/actions/auth";
+import { googleLoginAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -72,14 +72,24 @@ function LoginCard() {
     roleKey: "ADMIN" | "MANAGER" | "EMPLOYEE" | "PENDING"
   ) => {
     setMockLoading(roleKey);
-    const res = await mockRoleLoginAction(roleKey);
-    if (res?.error) {
-      toast.error(res.error);
+    try {
+      const response = await fetch("/api/auth/mock-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleKey }),
+      });
+      const res = await response.json();
+      if (!response.ok || res?.error) {
+        toast.error(res?.error || "Mock login failed. Please try again.");
+        setMockLoading(null);
+        return;
+      }
+      toast.success(`Signed in as ${roleKey}`);
+      window.location.href = res?.redirectTo || "/dashboard";
+    } catch {
+      toast.error("Could not reach the server. Please try again.");
       setMockLoading(null);
-      return;
     }
-    toast.success(`Signed in as ${roleKey}`);
-    window.location.href = res?.redirectTo || "/dashboard";
   };
 
   return (

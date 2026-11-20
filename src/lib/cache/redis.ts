@@ -16,6 +16,11 @@ const l1Cache = globalForCache.l1Cache ?? new Map<string, MemoryEntry>();
 globalForCache.l1Cache = l1Cache;
 
 function getRedisClient(): Redis | null {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    return null;
+  }
+
   const now = Date.now();
   if (
     globalForCache.redisAvailable === false &&
@@ -29,7 +34,6 @@ function getRedisClient(): Redis | null {
     return globalForCache.redisClient;
   }
 
-  const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
   try {
     globalForCache.redisLastAttempt = now;
     const client = new Redis(redisUrl, {
