@@ -539,17 +539,6 @@ export function AppShell({
 
           {/* Right Controls */}
           <div className="flex items-center gap-2">
-            {canCreateTasks && projects.length > 0 && (
-              <Button
-                size="sm"
-                onClick={() => setCreateTaskOpen(true)}
-                className="h-8 gap-1.5"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">New Task</span>
-              </Button>
-            )}
-
             {/* Notifications Popover */}
             <Popover open={notifOpen} onOpenChange={setNotifOpen}>
               <PopoverTrigger asChild>

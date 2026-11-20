@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus } from "lucide-react";
+import { Building2, Check, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { taskCreateSchema } from "@/lib/validations";
@@ -67,6 +67,7 @@ export function CreateTaskDialog({
 }: CreateTaskDialogProps) {
   const router = useRouter();
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [collabDeptFilter, setCollabDeptFilter] = useState<string>("ALL");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedDeps, setSelectedDeps] = useState<string[]>([]);
 
@@ -112,6 +113,7 @@ export function CreateTaskDialog({
         dueDate: "",
       });
       setSelectedCollaborators([]);
+      setCollabDeptFilter("ALL");
       setSelectedTags([]);
       setSelectedDeps([]);
     }
@@ -125,6 +127,56 @@ export function CreateTaskDialog({
   const todayStr = new Date().toLocaleDateString("en-CA");
   const minDueDate =
     startDate && startDate > todayStr ? startDate : todayStr;
+
+  const collaboratorCandidates = useMemo(
+    () => users.filter((u) => u.id !== assigneeId),
+    [users, assigneeId]
+  );
+
+  const departmentGroups = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; userIds: string[] }>();
+    for (const u of collaboratorCandidates) {
+      if (u.department?.id && u.department?.name) {
+        const existing = map.get(u.department.id);
+        if (existing) {
+          existing.userIds.push(u.id);
+        } else {
+          map.set(u.department.id, {
+            id: u.department.id,
+            name: u.department.name,
+            userIds: [u.id],
+          });
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [collaboratorCandidates]);
+
+  const visibleCollaborators = useMemo(() => {
+    if (collabDeptFilter === "ALL") return collaboratorCandidates;
+    if (collabDeptFilter === "UNASSIGNED") {
+      return collaboratorCandidates.filter((u) => !u.department?.id);
+    }
+    return collaboratorCandidates.filter(
+      (u) => u.department?.id === collabDeptFilter
+    );
+  }, [collaboratorCandidates, collabDeptFilter]);
+
+  const toggleDepartmentCollaborators = (deptUserIds: string[]) => {
+    const allSelected =
+      deptUserIds.length > 0 &&
+      deptUserIds.every((id) => selectedCollaborators.includes(id));
+
+    if (allSelected) {
+      setSelectedCollaborators((prev) =>
+        prev.filter((id) => !deptUserIds.includes(id))
+      );
+    } else {
+      setSelectedCollaborators((prev) =>
+        Array.from(new Set([...prev, ...deptUserIds]))
+      );
+    }
+  };
 
   const toggleItem = (
     id: string,
@@ -319,12 +371,113 @@ export function CreateTaskDialog({
           </div>
 
           {!parentId && users.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Collaborators</Label>
-              <div className="flex flex-wrap gap-1.5 rounded-md border border-[#EAECF0] bg-[#F7F8FA] p-2 max-h-24 overflow-y-auto">
-                {users
-                  .filter((u) => u.id !== assigneeId)
-                  .map((u) => {
+            <div className="space-y-2 rounded-lg border border-[#EAECF0] bg-[#F7F8FA] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-xs font-semibold text-[#20232B]">
+                  Collaborators ({selectedCollaborators.length} selected)
+                </Label>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedCollaborators((prev) =>
+                        Array.from(
+                          new Set([
+                            ...prev,
+                            ...visibleCollaborators.map((u) => u.id),
+                          ])
+                        )
+                      )
+                    }
+                    className="font-medium text-[#635BDB] hover:text-[#5148C9]"
+                  >
+                    Select all shown ({visibleCollaborators.length})
+                  </button>
+                  {selectedCollaborators.length > 0 && (
+                    <>
+                      <span className="text-[#D1D5DB]">·</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCollaborators([])}
+                        className="text-[#737987] hover:text-[#20232B]"
+                      >
+                        Clear all
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter & One-Click Select All by Department */}
+              {departmentGroups.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#737987]">
+                      <Building2 className="h-3 w-3" />
+                      Select all by department:
+                    </span>
+                    <Select
+                      value={collabDeptFilter}
+                      onValueChange={setCollabDeptFilter}
+                    >
+                      <SelectTrigger className="h-7 w-[155px] text-xs bg-white">
+                        <SelectValue placeholder="Filter department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All Departments</SelectItem>
+                        {departmentGroups.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name} ({dept.userIds.length})
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="UNASSIGNED">
+                          No Department
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {departmentGroups.map((dept) => {
+                      const allDeptSelected =
+                        dept.userIds.length > 0 &&
+                        dept.userIds.every((id) =>
+                          selectedCollaborators.includes(id)
+                        );
+                      return (
+                        <button
+                          key={dept.id}
+                          type="button"
+                          onClick={() =>
+                            toggleDepartmentCollaborators(dept.userIds)
+                          }
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                            allDeptSelected
+                              ? "border-[#635BDB] bg-[#635BDB] text-white"
+                              : "border-[#D5D9E2] bg-white text-[#374151] hover:border-[#635BDB] hover:bg-[#F0EFFF] hover:text-[#5148C9]"
+                          }`}
+                        >
+                          {allDeptSelected ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            <Plus className="h-3 w-3" />
+                          )}
+                          All {dept.name} ({dept.userIds.length})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Collaborators List */}
+              <div className="flex flex-wrap gap-1.5 rounded-md border border-[#EAECF0] bg-white p-2 max-h-28 overflow-y-auto">
+                {visibleCollaborators.length === 0 ? (
+                  <p className="w-full py-2 text-center text-xs text-[#737987]">
+                    No members available in this department.
+                  </p>
+                ) : (
+                  visibleCollaborators.map((u) => {
                     const active = selectedCollaborators.includes(u.id);
                     return (
                       <button
@@ -337,16 +490,22 @@ export function CreateTaskDialog({
                             setSelectedCollaborators
                           )
                         }
-                        className={`rounded-[5px] border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1.5 rounded-[5px] border px-2 py-1 text-[11px] font-medium transition-colors ${
                           active
                             ? "border-[#635BDB] bg-[#F0EFFF] text-[#5148C9]"
-                            : "border-[#EAECF0] bg-white text-[#4B5563] hover:border-[#D1D5DB]"
+                            : "border-[#EAECF0] bg-[#F7F8FA] text-[#4B5563] hover:border-[#D1D5DB]"
                         }`}
                       >
-                        {u.name}
+                        <span>{u.name}</span>
+                        {u.department?.name && (
+                          <span className="rounded bg-white/80 px-1 text-[10px] text-[#737987]">
+                            {u.department.name}
+                          </span>
+                        )}
                       </button>
                     );
-                  })}
+                  })
+                )}
               </div>
             </div>
           )}
