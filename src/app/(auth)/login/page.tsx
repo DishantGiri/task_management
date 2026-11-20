@@ -2,8 +2,17 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Lock, ShieldCheck } from "lucide-react";
-import { googleLoginAction } from "@/actions/auth";
+import {
+  Clock,
+  Loader2,
+  Lock,
+  Shield,
+  ShieldCheck,
+  UserCheck,
+  Users,
+} from "lucide-react";
+import { toast } from "sonner";
+import { googleLoginAction, mockRoleLoginAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,9 +22,41 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+const MOCK_ROLES = [
+  {
+    key: "ADMIN" as const,
+    label: "Admin",
+    sub: "Full access",
+    icon: Shield,
+    accent: "text-[#635BDB]",
+  },
+  {
+    key: "MANAGER" as const,
+    label: "Manager",
+    sub: "Projects & tasks",
+    icon: Users,
+    accent: "text-[#3B82F6]",
+  },
+  {
+    key: "EMPLOYEE" as const,
+    label: "Employee",
+    sub: "Assigned work",
+    icon: UserCheck,
+    accent: "text-[#16A34A]",
+  },
+  {
+    key: "PENDING" as const,
+    label: "On Hold",
+    sub: "Pending approval",
+    icon: Clock,
+    accent: "text-[#F59E0B]",
+  },
+];
+
 function LoginCard() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [mockLoading, setMockLoading] = useState<string | null>(null);
   const authError = searchParams.get("error");
 
   const handleGoogleSignIn = async () => {
@@ -25,6 +66,20 @@ function LoginCard() {
     } catch {
       // NextAuth signIn throws NEXT_REDIRECT which Next.js handles automatically
     }
+  };
+
+  const handleMockLogin = async (
+    roleKey: "ADMIN" | "MANAGER" | "EMPLOYEE" | "PENDING"
+  ) => {
+    setMockLoading(roleKey);
+    const res = await mockRoleLoginAction(roleKey);
+    if (res?.error) {
+      toast.error(res.error);
+      setMockLoading(null);
+      return;
+    }
+    toast.success(`Signed in as ${roleKey}`);
+    window.location.href = res?.redirectTo || "/dashboard";
   };
 
   return (
@@ -50,7 +105,7 @@ function LoginCard() {
           variant="outline"
           className="w-full h-10 gap-2.5 border-[#D5D9E2] bg-white text-[13.5px] font-medium text-[#20232B] hover:bg-[#F7F8FA]"
           onClick={handleGoogleSignIn}
-          disabled={loading}
+          disabled={loading || !!mockLoading}
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin text-[#635BDB]" />
@@ -76,6 +131,42 @@ function LoginCard() {
           )}
           Continue with Google
         </Button>
+
+        {/* Quick Mock Role Login Section for Testing */}
+        <div className="pt-3 border-t border-[#EAECF0]">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#737987] mb-2 text-center">
+            Quick Mock Login (Role Testing)
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {MOCK_ROLES.map((r) => {
+              const Icon = r.icon;
+              const isBusy = mockLoading === r.key;
+              return (
+                <button
+                  key={r.key}
+                  type="button"
+                  disabled={loading || !!mockLoading}
+                  onClick={() => handleMockLogin(r.key)}
+                  className="flex items-center gap-2.5 rounded-md border border-[#EAECF0] bg-[#F7F8FA] px-3 py-2 text-left transition-colors hover:border-[#635BDB]/50 hover:bg-[#F0EFFF]/60 disabled:opacity-50"
+                >
+                  {isBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-[#635BDB] shrink-0" />
+                  ) : (
+                    <Icon className={`h-4 w-4 shrink-0 ${r.accent}`} />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[#20232B] leading-tight">
+                      {r.label}
+                    </p>
+                    <p className="text-[10.5px] text-[#737987] truncate">
+                      {r.sub}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="rounded-lg border border-[#EAECF0] bg-[#F7F8FA] p-3 text-[11.5px] text-[#525866] space-y-1.5">
           <div className="flex items-center gap-1.5 font-medium text-[#20232B]">

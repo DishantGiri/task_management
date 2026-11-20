@@ -2,7 +2,9 @@ import dns from "node:dns";
 import net from "node:net";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
+import { invalidateWorkspaceCache } from "@/lib/cache/redis";
 import { authConfig, SUPER_ADMIN_EMAIL } from "./auth.config";
 
 // Force IPv4 for Google OAuth endpoints to prevent Node 22 undici IPv6 ETIMEDOUT
@@ -82,10 +84,88 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       issuer: "https://accounts.google.com",
       jwks_endpoint: "https://www.googleapis.com/oauth2/v3/certs",
     }),
+    Credentials({
+      id: "mock-role",
+      name: "Mock Role Login",
+      credentials: {
+        roleKey: { label: "Role Key", type: "text" },
+      },
+      async authorize(credentials) {
+        const roleKey = String(credentials?.roleKey || "").toUpperCase();
+
+        const MOCK_PROFILES = {
+          ADMIN: {
+            email: SUPER_ADMIN_EMAIL,
+            name: "Dishant Giri",
+            role: "ADMIN" as const,
+            status: "ACTIVE" as const,
+            designation: "Administrator",
+          },
+          MANAGER: {
+            email: "manager.test@fishtailinfosolutions.com",
+            name: "Sarah Chen (Manager)",
+            role: "MANAGER" as const,
+            status: "ACTIVE" as const,
+            designation: "Project Manager",
+          },
+          EMPLOYEE: {
+            email: "employee.test@fishtailinfosolutions.com",
+            name: "Alex Rivera (Employee)",
+            role: "EMPLOYEE" as const,
+            status: "ACTIVE" as const,
+            designation: "Software Developer",
+          },
+          PENDING: {
+            email: "pending.test@fishtailinfosolutions.com",
+            name: "Jordan Taylor (Pending)",
+            role: "EMPLOYEE" as const,
+            status: "PENDING" as const,
+            designation: "Awaiting Admin Approval",
+          },
+        };
+
+        const profile =
+          MOCK_PROFILES[roleKey as keyof typeof MOCK_PROFILES];
+        if (!profile) return null;
+
+        const dbUser = await prisma.user.upsert({
+          where: { email: profile.email },
+          update: {
+            role: profile.role,
+            status: profile.status,
+            designation: profile.designation,
+          },
+          create: {
+            name: profile.name,
+            email: profile.email,
+            passwordHash: "",
+            role: profile.role,
+            status: profile.status,
+            designation: profile.designation,
+          },
+        });
+
+        await invalidateWorkspaceCache();
+
+        return {
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          role: dbUser.role,
+          status: dbUser.status,
+          designation: dbUser.designation,
+          avatarUrl: dbUser.avatarUrl,
+          departmentId: dbUser.departmentId,
+        };
+      },
+    }),
   ],
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user, account }) {
+      if (account?.provider === "mock-role") {
+        return !!user?.email;
+      }
       if (account?.provider !== "google" || !user?.email) {
         return false;
       }
