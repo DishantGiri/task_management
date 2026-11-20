@@ -389,7 +389,7 @@ export function AppShell({
       <aside
         className={cn(
           "hidden lg:flex h-screen shrink-0 flex-col border-r border-[#EAECF0] bg-white transition-[width] duration-200 z-30",
-          collapsed ? "w-[64px]" : "w-[244px]"
+          collapsed ? "w-[68px]" : "w-[260px]"
         )}
       >
         {renderSidebarNav(false)}
