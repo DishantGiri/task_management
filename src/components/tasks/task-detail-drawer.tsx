@@ -371,6 +371,7 @@ export function TaskDetailDrawer({
   const completedSubtasks =
     task?.subtasks.filter((s) => s.status === "DONE").length ?? 0;
   const totalSubtasks = task?.subtasks.length ?? 0;
+  const todayStr = new Date().toLocaleDateString("en-CA");
 
   return (
     <>
@@ -582,6 +583,7 @@ export function TaskDetailDrawer({
                     </span>
                     <Input
                       type="date"
+                      min={todayStr}
                       disabled={!canFullEdit}
                       value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
                       onChange={(e) =>
@@ -858,6 +860,7 @@ export function TaskDetailDrawer({
 
                           <Input
                             type="date"
+                            min={todayStr}
                             value={subDueDate}
                             onChange={(e) => setSubDueDate(e.target.value)}
                             className="h-8 text-xs"

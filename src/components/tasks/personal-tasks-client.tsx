@@ -699,6 +699,7 @@ export function PersonalTasksClient({
 
             <Input
               type="date"
+              min={new Date().toLocaleDateString("en-CA")}
               value={quickDueDate}
               onChange={(e) => setQuickDueDate(e.target.value)}
               className="h-9 w-[142px] text-xs"

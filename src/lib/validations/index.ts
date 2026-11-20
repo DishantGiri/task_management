@@ -62,20 +62,45 @@ export const projectUpdateSchema = projectCreateSchema.extend({
   id: z.string().min(1),
 });
 
-export const taskCreateSchema = z.object({
-  title: z.string().min(2, "Task title is required").max(200),
-  description: z.string().max(10000).nullable().optional(),
-  projectId: z.string().min(1, "Project is required"),
-  parentId: z.string().nullable().optional(),
-  status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]).default("TODO"),
-  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
-  assigneeId: z.string().nullable().optional(),
-  collaboratorIds: z.array(z.string()).default([]),
-  tagIds: z.array(z.string()).default([]),
-  dependencyIds: z.array(z.string()).default([]),
-  startDate: z.string().nullable().optional(),
-  dueDate: z.string().nullable().optional(),
-});
+function isNotPastDate(val: string | null | undefined): boolean {
+  if (!val) return true;
+  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+  return val.slice(0, 10) >= todayStr;
+}
+
+export const taskCreateSchema = z
+  .object({
+    title: z.string().min(2, "Task title is required").max(200),
+    description: z.string().max(10000).nullable().optional(),
+    projectId: z.string().min(1, "Project is required"),
+    parentId: z.string().nullable().optional(),
+    status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]).default("TODO"),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+    assigneeId: z.string().nullable().optional(),
+    collaboratorIds: z.array(z.string()).default([]),
+    tagIds: z.array(z.string()).default([]),
+    dependencyIds: z.array(z.string()).default([]),
+    startDate: z.string().nullable().optional(),
+    dueDate: z
+      .string()
+      .nullable()
+      .optional()
+      .refine(isNotPastDate, {
+        message: "Due date cannot be in the past",
+      }),
+  })
+  .refine(
+    (data) => {
+      if (data.startDate && data.dueDate) {
+        return data.dueDate.slice(0, 10) >= data.startDate.slice(0, 10);
+      }
+      return true;
+    },
+    {
+      message: "Due date cannot be earlier than start date",
+      path: ["dueDate"],
+    }
+  );
 
 export const taskUpdateSchema = z.object({
   id: z.string().min(1),
@@ -138,7 +163,13 @@ export const personalTaskCreateSchema = z.object({
   status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]).default("TODO"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   category: z.string().min(1).max(40).default("General"),
-  dueDate: z.string().nullable().optional(),
+  dueDate: z
+    .string()
+    .nullable()
+    .optional()
+    .refine(isNotPastDate, {
+      message: "Due date cannot be in the past",
+    }),
   isPinned: z.boolean().default(false),
   checklist: z.array(personalChecklistItemSchema).default([]),
 });

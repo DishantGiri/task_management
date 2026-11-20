@@ -121,6 +121,10 @@ export function CreateTaskDialog({
   const status = watch("status");
   const priority = watch("priority");
   const assigneeId = watch("assigneeId");
+  const startDate = watch("startDate");
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const minDueDate =
+    startDate && startDate > todayStr ? startDate : todayStr;
 
   const toggleItem = (
     id: string,
@@ -300,7 +304,17 @@ export function CreateTaskDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="task-due">Due Date</Label>
-              <Input id="task-due" type="date" {...register("dueDate")} />
+              <Input
+                id="task-due"
+                type="date"
+                min={minDueDate}
+                {...register("dueDate")}
+              />
+              {errors.dueDate && (
+                <p className="text-[11px] text-red-600">
+                  {errors.dueDate.message}
+                </p>
+              )}
             </div>
           </div>
 
