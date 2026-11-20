@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { invalidateWorkspaceCache } from "@/lib/cache/redis";
 import {
   createActivityLog,
   createNotification,
@@ -58,6 +59,7 @@ export async function createEmployeeAction(values: unknown) {
       actorId: actor.id,
     });
 
+    await invalidateWorkspaceCache();
     revalidatePath("/team");
     revalidatePath("/dashboard");
     return { success: true, id: created.id };
@@ -115,6 +117,7 @@ export async function updateEmployeeAction(values: unknown) {
       actorId: actor.id,
     });
 
+    await invalidateWorkspaceCache();
     revalidatePath("/team");
     revalidatePath("/dashboard");
     revalidatePath("/reports");
@@ -150,6 +153,7 @@ export async function toggleEmployeeStatusAction(userId: string) {
       actorId: actor.id,
     });
 
+    await invalidateWorkspaceCache();
     revalidatePath("/team");
     revalidatePath("/dashboard");
     return { success: true, status: nextStatus };
@@ -217,6 +221,7 @@ export async function approveEmployeeAction(params: {
       link: "/dashboard",
     });
 
+    await invalidateWorkspaceCache();
     revalidatePath("/team");
     revalidatePath("/dashboard");
     revalidatePath("/pending-approval");
@@ -250,6 +255,7 @@ export async function createDepartmentAction(values: unknown) {
     });
 
     revalidatePath("/settings");
+    await invalidateWorkspaceCache();
     revalidatePath("/team");
     return { success: true };
   } catch (err) {
@@ -264,6 +270,7 @@ export async function deleteDepartmentAction(id: string) {
     await requireRole(["ADMIN"]);
     await prisma.department.delete({ where: { id } });
     revalidatePath("/settings");
+    await invalidateWorkspaceCache();
     revalidatePath("/team");
     return { success: true };
   } catch {
@@ -332,6 +339,7 @@ export async function updateProfileAction(values: unknown) {
 
     revalidatePath("/settings");
     revalidatePath("/dashboard");
+    await invalidateWorkspaceCache();
     revalidatePath("/team");
     return { success: true };
   } catch {

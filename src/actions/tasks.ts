@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { unlink } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import { invalidateWorkspaceCache } from "@/lib/cache/redis";
 import {
   canCreateTaskInProject,
   canEditTask,
@@ -19,6 +20,18 @@ import {
   taskUpdateSchema,
 } from "@/lib/validations";
 import type { TaskStatus } from "@prisma/client";
+import type { TaskListItem } from "@/types";
+
+const userSelect = {
+  id: true,
+  name: true,
+  email: true,
+  avatarUrl: true,
+  designation: true,
+  role: true,
+  status: true,
+  department: { select: { id: true, name: true } },
+};
 
 export async function createTaskAction(values: unknown) {
   try {
@@ -29,11 +42,21 @@ export async function createTaskAction(values: unknown) {
     }
 
     const data = parsed.data;
-    const allowed = await canCreateTaskInProject(
-      user,
-      data.projectId,
-      data.parentId
-    );
+
+    // Parallelize permission check, task key generation, and max position query!
+    const [allowed, taskKey, maxPos] = await Promise.all([
+      canCreateTaskInProject(user, data.projectId, data.parentId),
+      generateNextTaskKey(data.projectId),
+      prisma.task.aggregate({
+        where: {
+          projectId: data.projectId,
+          status: data.status,
+          parentId: data.parentId || null,
+        },
+        _max: { position: true },
+      }),
+    ]);
+
     if (!allowed) {
       return {
         error: data.parentId
@@ -41,16 +64,6 @@ export async function createTaskAction(values: unknown) {
           : "You do not have permission to create tasks in this project.",
       };
     }
-
-    const taskKey = await generateNextTaskKey(data.projectId);
-    const maxPos = await prisma.task.aggregate({
-      where: {
-        projectId: data.projectId,
-        status: data.status,
-        parentId: data.parentId || null,
-      },
-      _max: { position: true },
-    });
 
     const initialProgress =
       data.status === "DONE"
@@ -93,54 +106,98 @@ export async function createTaskAction(values: unknown) {
           })),
         },
       },
+      include: {
+        project: { select: { id: true, code: true, name: true, color: true } },
+        assignee: { select: userSelect },
+        collaborators: { include: { user: { select: userSelect } } },
+        tags: {
+          include: { tag: { select: { id: true, name: true, color: true } } },
+        },
+        subtasks: {
+          include: {
+            assignee: { select: userSelect },
+            _count: {
+              select: { subtasks: true, comments: true, attachments: true },
+            },
+          },
+        },
+        dependencies: {
+          include: {
+            dependsOn: {
+              select: { id: true, taskKey: true, title: true, status: true },
+            },
+          },
+        },
+        _count: { select: { subtasks: true, comments: true, attachments: true } },
+      },
     });
 
-    if (data.parentId) {
-      await recalculateParentProgress(data.parentId);
-    }
+    await invalidateWorkspaceCache();
 
-    await createActivityLog({
-      action: data.parentId ? "SUBTASK_ADDED" : "TASK_CREATED",
-      entityType: "TASK",
-      entityId: task.id,
-      description: data.parentId
-        ? `added subtask ${task.taskKey}: ${task.title}`
-        : `created task ${task.taskKey}: ${task.title}`,
-      actorId: user.id,
-      projectId: data.projectId,
-      taskId: data.parentId || task.id,
-    });
-
-    if (task.assigneeId) {
-      await createNotification({
-        userId: task.assigneeId,
+    // Run non-blocking side effects (activity logs, notifications, parent progress) in parallel
+    void Promise.all([
+      data.parentId ? recalculateParentProgress(data.parentId) : Promise.resolve(),
+      createActivityLog({
+        action: data.parentId ? "SUBTASK_ADDED" : "TASK_CREATED",
+        entityType: "TASK",
+        entityId: task.id,
+        description: data.parentId
+          ? `added subtask ${task.taskKey}: ${task.title}`
+          : `created task ${task.taskKey}: ${task.title}`,
         actorId: user.id,
-        type: "TASK_ASSIGNED",
-        title: `Assigned: ${task.taskKey}`,
-        message: `${user.name} assigned you to "${task.title}".`,
-        link: `/tasks?taskId=${task.parentId || task.id}`,
-        taskId: task.id,
-      });
-    }
-
-    for (const collabId of collaboratorIds) {
-      await createNotification({
-        userId: collabId,
-        actorId: user.id,
-        type: "TASK_ASSIGNED",
-        title: `Collaborator on ${task.taskKey}`,
-        message: `${user.name} added you as a collaborator on "${task.title}".`,
-        link: `/tasks?taskId=${task.parentId || task.id}`,
-        taskId: task.id,
-      });
-    }
+        projectId: data.projectId,
+        taskId: data.parentId || task.id,
+      }),
+      task.assigneeId
+        ? createNotification({
+            userId: task.assigneeId,
+            actorId: user.id,
+            type: "TASK_ASSIGNED",
+            title: `Assigned: ${task.taskKey}`,
+            message: `${user.name} assigned you to "${task.title}".`,
+            link: `/tasks?taskId=${task.parentId || task.id}`,
+            taskId: task.id,
+          })
+        : Promise.resolve(),
+      ...collaboratorIds.map((collabId) =>
+        createNotification({
+          userId: collabId,
+          actorId: user.id,
+          type: "TASK_ASSIGNED",
+          title: `Collaborator on ${task.taskKey}`,
+          message: `${user.name} added you as a collaborator on "${task.title}".`,
+          link: `/tasks?taskId=${task.parentId || task.id}`,
+          taskId: task.id,
+        })
+      ),
+    ]).catch(() => {});
 
     revalidatePath("/tasks");
     revalidatePath("/my-tasks");
     revalidatePath("/dashboard");
     revalidatePath("/calendar");
     revalidatePath(`/projects/${data.projectId}`);
-    return { success: true, id: task.id, taskKey: task.taskKey };
+
+    const serializedTask: TaskListItem = {
+      ...task,
+      startDate: task.startDate?.toISOString() ?? null,
+      dueDate: task.dueDate?.toISOString() ?? null,
+      completedAt: task.completedAt?.toISOString() ?? null,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString(),
+      subtasks: task.subtasks.map((s) => ({
+        ...s,
+        startDate: s.startDate?.toISOString() ?? null,
+        dueDate: s.dueDate?.toISOString() ?? null,
+      })),
+    };
+
+    return {
+      success: true,
+      id: task.id,
+      taskKey: task.taskKey,
+      task: serializedTask,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create task";
     return { error: message };
@@ -309,6 +366,7 @@ export async function updateTaskAction(values: unknown) {
       });
     }
 
+    await invalidateWorkspaceCache();
     revalidatePath("/tasks");
     revalidatePath("/my-tasks");
     revalidatePath("/dashboard");
@@ -369,6 +427,7 @@ export async function deleteTaskAction(taskId: string) {
       projectId: task.projectId,
     });
 
+    await invalidateWorkspaceCache();
     revalidatePath("/tasks");
     revalidatePath("/my-tasks");
     revalidatePath("/dashboard");

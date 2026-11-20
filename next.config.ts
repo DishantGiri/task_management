@@ -23,6 +23,18 @@ const nextConfig: NextConfig = {
     ],
   },
   experimental: {
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+    optimizePackageImports: [
+      "lucide-react",
+      "recharts",
+      "date-fns",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
+      "@dnd-kit/utilities",
+    ],
     serverActions: {
       bodySizeLimit: "10mb",
     },

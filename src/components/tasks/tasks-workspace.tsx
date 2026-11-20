@@ -439,6 +439,11 @@ export function TasksWorkspace({
             taskKey: t.taskKey,
             title: t.title,
           }))}
+          onCreated={(newTask) => {
+            if (newTask) {
+              setTasks((prev) => [newTask, ...prev]);
+            }
+          }}
         />
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { invalidateWorkspaceCache } from "@/lib/cache/redis";
 import {
   canManageProject,
   createActivityLog,
@@ -74,6 +75,7 @@ export async function createProjectAction(values: unknown) {
       });
     }
 
+    await invalidateWorkspaceCache();
     revalidatePath("/projects");
     revalidatePath("/dashboard");
     return { success: true, id: project.id };
@@ -149,6 +151,7 @@ export async function updateProjectAction(values: unknown) {
       projectId: parsed.data.id,
     });
 
+    await invalidateWorkspaceCache();
     revalidatePath("/projects");
     revalidatePath(`/projects/${parsed.data.id}`);
     revalidatePath("/dashboard");
@@ -168,6 +171,7 @@ export async function deleteProjectAction(projectId: string) {
     }
 
     await prisma.project.delete({ where: { id: projectId } });
+    await invalidateWorkspaceCache();
     revalidatePath("/projects");
     revalidatePath("/dashboard");
     revalidatePath("/tasks");
@@ -226,6 +230,7 @@ export async function addProjectMemberAction(
     });
 
     revalidatePath(`/projects/${projectId}`);
+    await invalidateWorkspaceCache();
     revalidatePath("/projects");
     return { success: true };
   } catch {
@@ -258,6 +263,7 @@ export async function removeProjectMemberAction(
     });
 
     revalidatePath(`/projects/${projectId}`);
+    await invalidateWorkspaceCache();
     revalidatePath("/projects");
     return { success: true };
   } catch {

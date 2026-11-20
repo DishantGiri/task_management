@@ -374,34 +374,62 @@ export function PersonalTasksClient({
     });
   };
 
-  // Quick Add Handler
+  // Instant Optimistic Quick Add Handler
   const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickTitle.trim()) return;
-    setCreating(true);
-    const res = await createPersonalTaskAction({
-      title: quickTitle.trim(),
-      category: quickCategory,
+    const titleToCreate = quickTitle.trim();
+    if (!titleToCreate) return;
+
+    const tempId = `temp-${Date.now()}`;
+    const optimisticTask: PersonalTaskItem = {
+      id: tempId,
+      title: titleToCreate,
+      notes: null,
+      status: "TODO",
       priority: quickPriority,
-      dueDate: quickDueDate || null,
+      category: quickCategory,
+      dueDate: quickDueDate ? new Date(quickDueDate).toISOString() : null,
       isPinned: quickPinned,
+      checklist: [],
+      completedAt: null,
+      userId: "me",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const savedCategory = quickCategory;
+    const savedPriority = quickPriority;
+    const savedDueDate = quickDueDate || null;
+    const savedPinned = quickPinned;
+
+    // Immediately update UI & clear form in 0ms
+    setTasks((prev) => [optimisticTask, ...prev]);
+    setQuickTitle("");
+    setQuickDueDate("");
+    setQuickPinned(false);
+    toast.success("Personal task added");
+
+    const res = await createPersonalTaskAction({
+      title: titleToCreate,
+      category: savedCategory,
+      priority: savedPriority,
+      dueDate: savedDueDate,
+      isPinned: savedPinned,
       status: "TODO",
       checklist: [],
     });
-    setCreating(false);
 
     if (res.error) {
+      setTasks((prev) => prev.filter((t) => t.id !== tempId));
       toast.error(res.error);
       return;
     }
 
     if (res.task) {
-      setTasks((prev) => [res.task!, ...prev]);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === tempId ? res.task! : t))
+      );
     }
-    setQuickTitle("");
-    setQuickDueDate("");
-    setQuickPinned(false);
-    toast.success("Personal task added");
     router.refresh();
   };
 

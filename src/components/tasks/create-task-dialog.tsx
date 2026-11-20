@@ -9,7 +9,12 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { taskCreateSchema } from "@/lib/validations";
 import { createTaskAction } from "@/actions/tasks";
-import type { ProjectSummary, TagSummary, UserSummary } from "@/types";
+import type {
+  ProjectSummary,
+  TagSummary,
+  TaskListItem,
+  UserSummary,
+} from "@/types";
 import {
   Dialog,
   DialogContent,
@@ -44,7 +49,7 @@ interface CreateTaskDialogProps {
   parentId?: string | null;
   parentTitle?: string | null;
   availableDependencies?: { id: string; taskKey: string; title: string }[];
-  onCreated?: () => void;
+  onCreated?: (newTask?: TaskListItem) => void;
 }
 
 export function CreateTaskDialog({
@@ -152,7 +157,7 @@ export function CreateTaskDialog({
         : `Task ${result.taskKey} created`
     );
     onOpenChange(false);
-    onCreated?.();
+    onCreated?.(result.task);
     router.refresh();
   };
 

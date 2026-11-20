@@ -143,6 +143,16 @@ export function AppShell({
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
+  // Warm the Next.js router cache for all primary sidebar routes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      for (const item of NAV_ITEMS) {
+        router.prefetch(item.href);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [router]);
+
   // Keyboard shortcut Cmd+K / Ctrl+K for global search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -255,6 +265,7 @@ export function AppShell({
             <Link
               key={item.href}
               href={item.href}
+              prefetch={true}
               onClick={() => isMobile && setMobileOpen(false)}
               className={cn(
                 "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors",

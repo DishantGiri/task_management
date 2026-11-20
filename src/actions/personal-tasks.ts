@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { invalidatePersonalTasksCache } from "@/lib/cache/redis";
 import { requireAuth } from "@/lib/permissions";
 import {
   personalTaskCreateSchema,
@@ -28,7 +29,8 @@ function parseChecklist(raw: unknown): PersonalChecklistItem[] {
     }));
 }
 
-function revalidatePersonalViews() {
+async function revalidatePersonalViews(userId: string) {
+  await invalidatePersonalTasksCache(userId);
   revalidatePath("/personal-tasks");
   revalidatePath("/my-tasks");
   revalidatePath("/dashboard");
@@ -60,7 +62,7 @@ export async function createPersonalTaskAction(values: unknown) {
       },
     });
 
-    revalidatePersonalViews();
+    await revalidatePersonalViews(user.id);
     return {
       success: true,
       task: {
@@ -123,7 +125,7 @@ export async function updatePersonalTaskAction(values: unknown) {
       data: updatePayload,
     });
 
-    revalidatePersonalViews();
+    await revalidatePersonalViews(user.id);
     return {
       success: true,
       task: {
@@ -167,7 +169,7 @@ export async function addPersonalChecklistItemAction(
       },
     });
 
-    revalidatePersonalViews();
+    await revalidatePersonalViews(user.id);
     return { success: true, checklist: nextChecklist };
   } catch {
     return { error: "Failed to add checklist item." };
@@ -197,7 +199,7 @@ export async function togglePersonalChecklistItemAction(
       },
     });
 
-    revalidatePersonalViews();
+    await revalidatePersonalViews(user.id);
     return { success: true, checklist: nextChecklist };
   } catch {
     return { error: "Failed to update checklist item." };
@@ -225,7 +227,7 @@ export async function removePersonalChecklistItemAction(
       },
     });
 
-    revalidatePersonalViews();
+    await revalidatePersonalViews(user.id);
     return { success: true, checklist: nextChecklist };
   } catch {
     return { error: "Failed to remove checklist item." };
@@ -241,7 +243,7 @@ export async function deletePersonalTaskAction(taskId: string) {
     if (!existing) return { error: "Personal task not found." };
 
     await prisma.personalTask.delete({ where: { id: existing.id } });
-    revalidatePersonalViews();
+    await revalidatePersonalViews(user.id);
     return { success: true };
   } catch {
     return { error: "Failed to delete personal task." };
@@ -254,7 +256,7 @@ export async function clearCompletedPersonalTasksAction() {
     await prisma.personalTask.deleteMany({
       where: { userId: user.id, status: "DONE" },
     });
-    revalidatePersonalViews();
+    await revalidatePersonalViews(user.id);
     return { success: true };
   } catch {
     return { error: "Failed to clear completed personal tasks." };

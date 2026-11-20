@@ -1,4 +1,6 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { withCache } from "@/lib/cache/redis";
 import {
   getAccessibleProjectIds,
   type SessionUser,
@@ -12,45 +14,49 @@ import type {
 } from "@/types";
 import { startOfDay, subDays, format } from "date-fns";
 
-export async function getPersonalTasks(
-  userId: string
-): Promise<PersonalTaskItem[]> {
-  const rows = await prisma.personalTask.findMany({
-    where: { userId },
-    orderBy: [
-      { isPinned: "desc" },
-      { status: "asc" },
-      { dueDate: "asc" },
-      { updatedAt: "desc" },
-    ],
-  });
+export const getPersonalTasks = cache(
+  async (userId: string): Promise<PersonalTaskItem[]> => {
+    return withCache(`meridian:personal:${userId}`, 60, async () => {
+      const rows = await prisma.personalTask.findMany({
+        where: { userId },
+        orderBy: [
+          { isPinned: "desc" },
+          { status: "asc" },
+          { dueDate: "asc" },
+          { updatedAt: "desc" },
+        ],
+      });
 
-  return rows.map((row) => {
-    const checklist: PersonalChecklistItem[] = Array.isArray(row.checklist)
-      ? (row.checklist as unknown as PersonalChecklistItem[]).map((item) => ({
-          id: String(item.id),
-          title: String(item.title),
-          completed: Boolean(item.completed),
-        }))
-      : [];
+      return rows.map((row) => {
+        const checklist: PersonalChecklistItem[] = Array.isArray(row.checklist)
+          ? (row.checklist as unknown as PersonalChecklistItem[]).map(
+              (item) => ({
+                id: String(item.id),
+                title: String(item.title),
+                completed: Boolean(item.completed),
+              })
+            )
+          : [];
 
-    return {
-      id: row.id,
-      title: row.title,
-      notes: row.notes,
-      status: row.status,
-      priority: row.priority,
-      category: row.category,
-      dueDate: row.dueDate?.toISOString() ?? null,
-      isPinned: row.isPinned,
-      checklist,
-      completedAt: row.completedAt?.toISOString() ?? null,
-      userId: row.userId,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    };
-  });
-}
+        return {
+          id: row.id,
+          title: row.title,
+          notes: row.notes,
+          status: row.status,
+          priority: row.priority,
+          category: row.category,
+          dueDate: row.dueDate?.toISOString() ?? null,
+          isPinned: row.isPinned,
+          checklist,
+          completedAt: row.completedAt?.toISOString() ?? null,
+          userId: row.userId,
+          createdAt: row.createdAt.toISOString(),
+          updatedAt: row.updatedAt.toISOString(),
+        };
+      });
+    });
+  }
+);
 
 const userSelect = {
   id: true,
@@ -63,42 +69,50 @@ const userSelect = {
   department: { select: { id: true, name: true } },
 };
 
-export async function getWorkspaceReferenceData(user: SessionUser) {
-  const accessibleProjectIds = await getAccessibleProjectIds(user);
+export const getWorkspaceReferenceData = cache(
+  async (user: SessionUser) => {
+    return withCache(
+      `meridian:ref:${user.id}:${user.role}`,
+      90,
+      async () => {
+        const accessibleProjectIds = await getAccessibleProjectIds(user);
 
-  const [projects, users, tags, departments] = await Promise.all([
-    prisma.project.findMany({
-      where:
-        accessibleProjectIds !== null
-          ? { id: { in: accessibleProjectIds } }
-          : undefined,
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        color: true,
-        status: true,
-        priority: true,
-      },
-    }),
-    prisma.user.findMany({
-      where: { status: { not: "INACTIVE" } },
-      orderBy: { name: "asc" },
-      select: userSelect,
-    }),
-    prisma.tag.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, color: true },
-    }),
-    prisma.department.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, description: true },
-    }),
-  ]);
+        const [projects, users, tags, departments] = await Promise.all([
+          prisma.project.findMany({
+            where:
+              accessibleProjectIds !== null
+                ? { id: { in: accessibleProjectIds } }
+                : undefined,
+            orderBy: { name: "asc" },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              color: true,
+              status: true,
+              priority: true,
+            },
+          }),
+          prisma.user.findMany({
+            where: { status: { not: "INACTIVE" } },
+            orderBy: { name: "asc" },
+            select: userSelect,
+          }),
+          prisma.tag.findMany({
+            orderBy: { name: "asc" },
+            select: { id: true, name: true, color: true },
+          }),
+          prisma.department.findMany({
+            orderBy: { name: "asc" },
+            select: { id: true, name: true, description: true },
+          }),
+        ]);
 
-  return { projects, users, tags, departments };
-}
+        return { projects, users, tags, departments };
+      }
+    );
+  }
+);
 
 export async function getTasksList(
   user: SessionUser,
@@ -108,136 +122,158 @@ export async function getTasksList(
     includeSubtasksAsTopLevel?: boolean;
   }
 ): Promise<TaskListItem[]> {
-  const accessibleProjectIds = await getAccessibleProjectIds(user);
+  const cacheKey = `meridian:tasks:${user.id}:${user.role}:${
+    options?.projectId || "all"
+  }:${options?.onlyMine ? "mine" : "all"}:${
+    options?.includeSubtasksAsTopLevel ? "subs" : "top"
+  }`;
 
-  const where: Prisma.TaskWhereInput = {};
-  if (!options?.includeSubtasksAsTopLevel) {
-    where.parentId = null;
-  }
-  if (accessibleProjectIds !== null) {
-    where.projectId = { in: accessibleProjectIds };
-  }
-  if (options?.projectId) {
-    where.projectId = options.projectId;
-  }
-  if (options?.onlyMine) {
-    where.OR = [
-      { assigneeId: user.id },
-      { collaborators: { some: { userId: user.id } } },
-    ];
-  }
+  return withCache(cacheKey, 45, async () => {
+    const accessibleProjectIds = await getAccessibleProjectIds(user);
 
-  const tasks = await prisma.task.findMany({
-    where,
-    orderBy: [{ position: "asc" }, { createdAt: "desc" }],
-    include: {
-      project: { select: { id: true, code: true, name: true, color: true } },
-      assignee: { select: userSelect },
-      collaborators: {
-        include: { user: { select: userSelect } },
-      },
-      tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
-      subtasks: {
-        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-        include: {
-          assignee: { select: userSelect },
-          _count: { select: { subtasks: true, comments: true, attachments: true } },
+    const where: Prisma.TaskWhereInput = {};
+    if (!options?.includeSubtasksAsTopLevel) {
+      where.parentId = null;
+    }
+    if (accessibleProjectIds !== null) {
+      where.projectId = { in: accessibleProjectIds };
+    }
+    if (options?.projectId) {
+      where.projectId = options.projectId;
+    }
+    if (options?.onlyMine) {
+      where.OR = [
+        { assigneeId: user.id },
+        { collaborators: { some: { userId: user.id } } },
+      ];
+    }
+
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: [{ position: "asc" }, { createdAt: "desc" }],
+      include: {
+        project: { select: { id: true, code: true, name: true, color: true } },
+        assignee: { select: userSelect },
+        collaborators: {
+          include: { user: { select: userSelect } },
         },
-      },
-      dependencies: {
-        include: {
-          dependsOn: {
-            select: { id: true, taskKey: true, title: true, status: true },
+        tags: {
+          include: { tag: { select: { id: true, name: true, color: true } } },
+        },
+        subtasks: {
+          orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+          include: {
+            assignee: { select: userSelect },
+            _count: {
+              select: { subtasks: true, comments: true, attachments: true },
+            },
           },
         },
+        dependencies: {
+          include: {
+            dependsOn: {
+              select: { id: true, taskKey: true, title: true, status: true },
+            },
+          },
+        },
+        _count: { select: { subtasks: true, comments: true, attachments: true } },
       },
-      _count: { select: { subtasks: true, comments: true, attachments: true } },
-    },
-  });
+    });
 
-  return tasks.map((t) => ({
-    ...t,
-    startDate: t.startDate?.toISOString() ?? null,
-    dueDate: t.dueDate?.toISOString() ?? null,
-    completedAt: t.completedAt?.toISOString() ?? null,
-    createdAt: t.createdAt.toISOString(),
-    updatedAt: t.updatedAt.toISOString(),
-    subtasks: t.subtasks.map((s) => ({
-      ...s,
-      startDate: s.startDate?.toISOString() ?? null,
-      dueDate: s.dueDate?.toISOString() ?? null,
-    })),
-  }));
-}
-
-export async function getProjectsList(
-  user: SessionUser
-): Promise<ProjectListItem[]> {
-  const accessibleProjectIds = await getAccessibleProjectIds(user);
-
-  const projects = await prisma.project.findMany({
-    where:
-      accessibleProjectIds !== null
-        ? { id: { in: accessibleProjectIds } }
-        : undefined,
-    orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
-    include: {
-      manager: { select: userSelect },
-      members: {
-        orderBy: { joinedAt: "asc" },
-        include: { user: { select: userSelect } },
-      },
-      tasks: {
-        where: { parentId: null },
-        select: { id: true, status: true, dueDate: true, progress: true },
-      },
-    },
-  });
-
-  const todayStart = startOfDay(new Date());
-
-  return projects.map((p) => {
-    const total = p.tasks.length;
-    const completed = p.tasks.filter((t) => t.status === "DONE").length;
-    const inProgress = p.tasks.filter(
-      (t) => t.status === "IN_PROGRESS" || t.status === "IN_REVIEW"
-    ).length;
-    const overdue = p.tasks.filter(
-      (t) => t.status !== "DONE" && t.dueDate && t.dueDate < todayStart
-    ).length;
-    const progress =
-      total === 0
-        ? 0
-        : Math.round(
-            p.tasks.reduce(
-              (acc, t) => acc + (t.status === "DONE" ? 100 : t.progress),
-              0
-            ) / total
-          );
-
-    return {
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      description: p.description,
-      color: p.color,
-      status: p.status,
-      priority: p.priority,
-      startDate: p.startDate?.toISOString() ?? null,
-      endDate: p.endDate?.toISOString() ?? null,
-      managerId: p.managerId,
-      manager: p.manager,
-      members: p.members.map((m) => ({
-        id: m.id,
-        role: m.role,
-        user: m.user,
+    return tasks.map((t) => ({
+      ...t,
+      startDate: t.startDate?.toISOString() ?? null,
+      dueDate: t.dueDate?.toISOString() ?? null,
+      completedAt: t.completedAt?.toISOString() ?? null,
+      createdAt: t.createdAt.toISOString(),
+      updatedAt: t.updatedAt.toISOString(),
+      subtasks: t.subtasks.map((s) => ({
+        ...s,
+        startDate: s.startDate?.toISOString() ?? null,
+        dueDate: s.dueDate?.toISOString() ?? null,
       })),
-      taskStats: { total, completed, inProgress, overdue, progress },
-    };
+    }));
   });
 }
 
-export async function getDashboardData(user: SessionUser) {
+export const getProjectsList = cache(
+  async (user: SessionUser): Promise<ProjectListItem[]> => {
+    return withCache(
+      `meridian:projects:${user.id}:${user.role}`,
+      60,
+      async () => {
+        const accessibleProjectIds = await getAccessibleProjectIds(user);
+
+        const projects = await prisma.project.findMany({
+          where:
+            accessibleProjectIds !== null
+              ? { id: { in: accessibleProjectIds } }
+              : undefined,
+          orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+          include: {
+            manager: { select: userSelect },
+            members: {
+              orderBy: { joinedAt: "asc" },
+              include: { user: { select: userSelect } },
+            },
+            tasks: {
+              where: { parentId: null },
+              select: { id: true, status: true, dueDate: true, progress: true },
+            },
+          },
+        });
+
+        const todayStart = startOfDay(new Date());
+
+        return projects.map((p) => {
+          const total = p.tasks.length;
+          const completed = p.tasks.filter((t) => t.status === "DONE").length;
+          const inProgress = p.tasks.filter(
+            (t) => t.status === "IN_PROGRESS" || t.status === "IN_REVIEW"
+          ).length;
+          const overdue = p.tasks.filter(
+            (t) => t.status !== "DONE" && t.dueDate && t.dueDate < todayStart
+          ).length;
+          const progress =
+            total === 0
+              ? 0
+              : Math.round(
+                  p.tasks.reduce(
+                    (acc, t) => acc + (t.status === "DONE" ? 100 : t.progress),
+                    0
+                  ) / total
+                );
+
+          return {
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            description: p.description,
+            color: p.color,
+            status: p.status,
+            priority: p.priority,
+            startDate: p.startDate?.toISOString() ?? null,
+            endDate: p.endDate?.toISOString() ?? null,
+            managerId: p.managerId,
+            manager: p.manager,
+            members: p.members.map((m) => ({
+              id: m.id,
+              role: m.role,
+              user: m.user,
+            })),
+            taskStats: { total, completed, inProgress, overdue, progress },
+          };
+        });
+      }
+    );
+  }
+);
+
+export const getDashboardData = cache(async (user: SessionUser) => {
+  return withCache(
+    `meridian:dashboard:${user.id}:${user.role}`,
+    45,
+    async () => {
   const accessibleProjectIds = await getAccessibleProjectIds(user);
   const projectFilter =
     accessibleProjectIds !== null ? { in: accessibleProjectIds } : undefined;
@@ -419,4 +455,6 @@ export async function getDashboardData(user: SessionUser) {
     trendData,
     statusDistribution,
   };
-}
+    }
+  );
+});

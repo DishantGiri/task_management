@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { auth } from "@/lib/auth";
 import { SUPER_ADMIN_EMAIL } from "@/lib/auth/auth.config";
 import { prisma } from "@/lib/prisma";
@@ -19,43 +20,23 @@ export interface SessionUser {
   departmentId: string | null;
 }
 
-export async function getAuthenticatedUser(): Promise<SessionUser | null> {
-  const session = await auth();
-  const sessionId = session?.user?.id;
-  const sessionEmail = session?.user?.email?.toLowerCase().trim();
+export const getAuthenticatedUser = cache(
+  async (): Promise<SessionUser | null> => {
+    const session = await auth();
+    const sessionId = session?.user?.id;
+    const sessionEmail = session?.user?.email?.toLowerCase().trim();
 
-  if (!sessionId && !sessionEmail) return null;
+    if (!sessionId && !sessionEmail) return null;
 
-  let dbUser = await prisma.user.findFirst({
-    where: sessionId
-      ? { OR: [{ id: sessionId }, ...(sessionEmail ? [{ email: sessionEmail }] : [])] }
-      : { email: sessionEmail },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      designation: true,
-      avatarUrl: true,
-      departmentId: true,
-    },
-  });
-
-  if (!dbUser && sessionEmail) {
-    const isSuper = sessionEmail === SUPER_ADMIN_EMAIL;
-    dbUser = await prisma.user.create({
-      data: {
-        name: session?.user?.name || sessionEmail.split("@")[0],
-        email: sessionEmail,
-        passwordHash: "",
-        avatarUrl: session?.user?.avatarUrl || null,
-        role: isSuper ? "ADMIN" : "EMPLOYEE",
-        status: isSuper ? "ACTIVE" : "PENDING",
-        designation: isSuper
-          ? "Company Administrator"
-          : "Awaiting Admin Approval",
-      },
+    let dbUser = await prisma.user.findFirst({
+      where: sessionId
+        ? {
+            OR: [
+              { id: sessionId },
+              ...(sessionEmail ? [{ email: sessionEmail }] : []),
+            ],
+          }
+        : { email: sessionEmail },
       select: {
         id: true,
         name: true,
@@ -67,41 +48,69 @@ export async function getAuthenticatedUser(): Promise<SessionUser | null> {
         departmentId: true,
       },
     });
+
+    if (!dbUser && sessionEmail) {
+      const isSuper = sessionEmail === SUPER_ADMIN_EMAIL;
+      dbUser = await prisma.user.create({
+        data: {
+          name: session?.user?.name || sessionEmail.split("@")[0],
+          email: sessionEmail,
+          passwordHash: "",
+          avatarUrl: session?.user?.avatarUrl || null,
+          role: isSuper ? "ADMIN" : "EMPLOYEE",
+          status: isSuper ? "ACTIVE" : "PENDING",
+          designation: isSuper
+            ? "Company Administrator"
+            : "Awaiting Admin Approval",
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          designation: true,
+          avatarUrl: true,
+          departmentId: true,
+        },
+      });
+    }
+
+    if (!dbUser) return null;
+
+    if (
+      dbUser.email.toLowerCase() === SUPER_ADMIN_EMAIL &&
+      (dbUser.role !== "ADMIN" || dbUser.status !== "ACTIVE")
+    ) {
+      dbUser = await prisma.user.update({
+        where: { id: dbUser.id },
+        data: { role: "ADMIN", status: "ACTIVE" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          designation: true,
+          avatarUrl: true,
+          departmentId: true,
+        },
+      });
+    }
+
+    return dbUser;
   }
+);
 
-  if (!dbUser) return null;
-
-  // Ensure dishantgiri@fishtailinfosolutions.com is always ADMIN + ACTIVE
-  if (
-    dbUser.email.toLowerCase() === SUPER_ADMIN_EMAIL &&
-    (dbUser.role !== "ADMIN" || dbUser.status !== "ACTIVE")
-  ) {
-    dbUser = await prisma.user.update({
-      where: { id: dbUser.id },
-      data: { role: "ADMIN", status: "ACTIVE" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        designation: true,
-        avatarUrl: true,
-        departmentId: true,
-      },
-    });
+export const getCurrentUser = cache(
+  async (): Promise<SessionUser | null> => {
+    const user = await getAuthenticatedUser();
+    if (!user || user.status !== "ACTIVE") {
+      return null;
+    }
+    return user;
   }
-
-  return dbUser;
-}
-
-export async function getCurrentUser(): Promise<SessionUser | null> {
-  const user = await getAuthenticatedUser();
-  if (!user || user.status !== "ACTIVE") {
-    return null;
-  }
-  return user;
-}
+);
 
 export async function requireAuth(): Promise<SessionUser> {
   const user = await getCurrentUser();
@@ -250,33 +259,33 @@ export async function canEditTask(
   };
 }
 
-export async function getAccessibleProjectIds(
-  user: SessionUser
-): Promise<string[] | null> {
-  if (user.role === "ADMIN") return null; // null means unrestricted
+export const getAccessibleProjectIds = cache(
+  async (user: SessionUser): Promise<string[] | null> => {
+    if (user.role === "ADMIN") return null; // null means unrestricted
 
-  const projects = await prisma.project.findMany({
-    where: {
-      OR: [
-        { managerId: user.id },
-        { members: { some: { userId: user.id } } },
-        {
-          tasks: {
-            some: {
-              OR: [
-                { assigneeId: user.id },
-                { collaborators: { some: { userId: user.id } } },
-              ],
+    const projects = await prisma.project.findMany({
+      where: {
+        OR: [
+          { managerId: user.id },
+          { members: { some: { userId: user.id } } },
+          {
+            tasks: {
+              some: {
+                OR: [
+                  { assigneeId: user.id },
+                  { collaborators: { some: { userId: user.id } } },
+                ],
+              },
             },
           },
-        },
-      ],
-    },
-    select: { id: true },
-  });
+        ],
+      },
+      select: { id: true },
+    });
 
-  return projects.map((p) => p.id);
-}
+    return projects.map((p) => p.id);
+  }
+);
 
 export async function generateNextTaskKey(projectId: string): Promise<string> {
   const project = await prisma.project.findUnique({
@@ -397,7 +406,16 @@ export async function createNotification(params: {
   });
 }
 
+const deadlineSyncCache = new Map<string, number>();
+
 export async function syncUpcomingDeadlineNotifications(userId: string) {
+  const nowMs = Date.now();
+  const lastSync = deadlineSyncCache.get(userId) || 0;
+  if (nowMs - lastSync < 5 * 60 * 1000) {
+    return;
+  }
+  deadlineSyncCache.set(userId, nowMs);
+
   const now = new Date();
   const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
