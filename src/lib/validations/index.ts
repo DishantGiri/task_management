@@ -100,6 +100,14 @@ export const commentCreateSchema = z.object({
 export const departmentCreateSchema = z.object({
   name: z.string().min(2, "Department name is required").max(80),
   description: z.string().max(500).nullable().optional(),
+  memberIds: z.array(z.string()).optional(),
+});
+
+export const departmentUpdateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(2, "Department name is required").max(80),
+  description: z.string().max(500).nullable().optional(),
+  memberIds: z.array(z.string()).optional(),
 });
 
 export const tagCreateSchema = z.object({

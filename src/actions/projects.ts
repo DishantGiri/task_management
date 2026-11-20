@@ -130,7 +130,27 @@ export async function updateProjectAction(values: unknown) {
       },
     });
 
-    // Ensure manager is a LEAD member
+    // Sync project members and ensure manager is LEAD
+    const uniqueMemberIds = Array.from(
+      new Set([...(parsed.data.memberIds || []), managerId])
+    );
+
+    await prisma.projectMember.deleteMany({
+      where: {
+        projectId: parsed.data.id,
+        userId: { notIn: uniqueMemberIds },
+      },
+    });
+
+    await prisma.projectMember.createMany({
+      data: uniqueMemberIds.map((uid) => ({
+        projectId: parsed.data.id,
+        userId: uid,
+        role: uid === managerId ? ("LEAD" as const) : ("MEMBER" as const),
+      })),
+      skipDuplicates: true,
+    });
+
     await prisma.projectMember.upsert({
       where: {
         projectId_userId: {
@@ -268,5 +288,55 @@ export async function removeProjectMemberAction(
     return { success: true };
   } catch {
     return { error: "Failed to remove project member." };
+  }
+}
+
+export async function addProjectMembersBatchAction(
+  projectId: string,
+  userIds: string[],
+  role: ProjectMemberRole = "MEMBER"
+) {
+  try {
+    const actor = await requireAuth();
+    const allowed = await canManageProject(actor, projectId);
+    if (!allowed) {
+      return { error: "You do not have permission to manage project members." };
+    }
+
+    const cleanIds = Array.from(new Set(userIds.filter(Boolean)));
+    if (cleanIds.length === 0) {
+      return { error: "Please select at least one employee." };
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { name: true, code: true },
+    });
+    if (!project) return { error: "Project not found." };
+
+    await prisma.projectMember.createMany({
+      data: cleanIds.map((userId) => ({
+        projectId,
+        userId,
+        role,
+      })),
+      skipDuplicates: true,
+    });
+
+    await createActivityLog({
+      action: "MEMBER_ADDED",
+      entityType: "PROJECT",
+      entityId: projectId,
+      description: `added ${cleanIds.length} member(s) to ${project.name}`,
+      actorId: actor.id,
+      projectId,
+    });
+
+    await invalidateWorkspaceCache();
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/projects");
+    return { success: true, count: cleanIds.length };
+  } catch {
+    return { error: "Failed to add project members." };
   }
 }

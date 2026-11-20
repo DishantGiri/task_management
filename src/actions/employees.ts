@@ -13,6 +13,7 @@ import {
 import type { Role } from "@prisma/client";
 import {
   departmentCreateSchema,
+  departmentUpdateSchema,
   employeeCreateSchema,
   employeeUpdateSchema,
   passwordChangeSchema,
@@ -247,17 +248,26 @@ export async function createDepartmentAction(values: unknown) {
     });
     if (existing) return { error: "Department already exists." };
 
-    await prisma.department.create({
+    const created = await prisma.department.create({
       data: {
         name: parsed.data.name.trim(),
         description: parsed.data.description?.trim() || null,
       },
     });
 
-    revalidatePath("/settings");
+    if (parsed.data.memberIds && parsed.data.memberIds.length > 0) {
+      await prisma.user.updateMany({
+        where: { id: { in: parsed.data.memberIds } },
+        data: { departmentId: created.id },
+      });
+    }
+
     await invalidateWorkspaceCache();
+    revalidatePath("/departments");
+    revalidatePath("/settings");
     revalidatePath("/team");
-    return { success: true };
+    revalidatePath("/projects");
+    return { success: true, id: created.id };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create department";
     if (message === "FORBIDDEN") return { error: "Only Admins can manage departments." };
@@ -265,13 +275,73 @@ export async function createDepartmentAction(values: unknown) {
   }
 }
 
+export async function updateDepartmentAction(values: unknown) {
+  try {
+    await requireRole(["ADMIN"]);
+    const parsed = departmentUpdateSchema.safeParse(values);
+    if (!parsed.success) {
+      return { error: parsed.error.errors[0]?.message || "Invalid department data" };
+    }
+
+    const name = parsed.data.name.trim();
+    const conflict = await prisma.department.findFirst({
+      where: { name, id: { not: parsed.data.id } },
+    });
+    if (conflict) {
+      return { error: "Another department already uses this name." };
+    }
+
+    await prisma.department.update({
+      where: { id: parsed.data.id },
+      data: {
+        name,
+        description: parsed.data.description?.trim() || null,
+      },
+    });
+
+    if (parsed.data.memberIds !== undefined) {
+      await prisma.user.updateMany({
+        where: {
+          departmentId: parsed.data.id,
+          id: { notIn: parsed.data.memberIds },
+        },
+        data: { departmentId: null },
+      });
+
+      if (parsed.data.memberIds.length > 0) {
+        await prisma.user.updateMany({
+          where: { id: { in: parsed.data.memberIds } },
+          data: { departmentId: parsed.data.id },
+        });
+      }
+    }
+
+    await invalidateWorkspaceCache();
+    revalidatePath("/departments");
+    revalidatePath("/settings");
+    revalidatePath("/team");
+    revalidatePath("/projects");
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update department";
+    if (message === "FORBIDDEN") return { error: "Only Admins can update departments." };
+    return { error: message };
+  }
+}
+
 export async function deleteDepartmentAction(id: string) {
   try {
     await requireRole(["ADMIN"]);
+    await prisma.user.updateMany({
+      where: { departmentId: id },
+      data: { departmentId: null },
+    });
     await prisma.department.delete({ where: { id } });
-    revalidatePath("/settings");
     await invalidateWorkspaceCache();
+    revalidatePath("/departments");
+    revalidatePath("/settings");
     revalidatePath("/team");
+    revalidatePath("/projects");
     return { success: true };
   } catch {
     return { error: "Failed to delete department." };
