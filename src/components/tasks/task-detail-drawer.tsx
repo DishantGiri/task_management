@@ -1095,10 +1095,12 @@ export function TaskDetailDrawer({
                       <MessageSquare className="h-3.5 w-3.5" />
                       Comments ({task.comments.length})
                     </TabsTrigger>
-                    <TabsTrigger value="activity" className="gap-1.5">
-                      <Activity className="h-3.5 w-3.5" />
-                      Activity ({task.activityLogs.length})
-                    </TabsTrigger>
+                    {currentUserRole !== "EMPLOYEE" && (
+                      <TabsTrigger value="activity" className="gap-1.5">
+                        <Activity className="h-3.5 w-3.5" />
+                        Activity ({task.activityLogs.length})
+                      </TabsTrigger>
+                    )}
                   </TabsList>
 
                   <TabsContent value="comments" className="space-y-4">

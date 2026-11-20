@@ -29,24 +29,33 @@ export default async function ProjectDetailPage({
     getTasksList(user, { projectId: id }),
     getWorkspaceReferenceData(user),
     canManageProject(user, id),
-    prisma.activityLog.findMany({
-      where:
-        user.role === "ADMIN"
-          ? { projectId: id }
-          : {
-              projectId: id,
-              entityType:
-                user.role === "MANAGER"
-                  ? { in: ["TASK", "PROJECT"] }
-                  : "TASK",
-              actor: { role: { not: "ADMIN" } },
-            },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      include: {
-        actor: { select: { id: true, name: true, avatarUrl: true } },
-      },
-    }),
+    user.role === "EMPLOYEE"
+      ? Promise.resolve([])
+      : prisma.activityLog.findMany({
+          where:
+            user.role === "ADMIN"
+              ? { projectId: id }
+              : {
+                  projectId: id,
+                  entityType: "TASK",
+                  action: {
+                    in: [
+                      "TASK_CREATED",
+                      "STATUS_CHANGED",
+                      "ASSIGNEE_CHANGED",
+                      "SUBTASK_ADDED",
+                      "COMMENT_ADDED",
+                      "ATTACHMENT_UPLOADED",
+                    ],
+                  },
+                  actor: { role: { not: "ADMIN" } },
+                },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          include: {
+            actor: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        }),
   ]);
 
   const project = projects.find((p) => p.id === id);

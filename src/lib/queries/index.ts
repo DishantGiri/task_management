@@ -271,33 +271,21 @@ export const getProjectsList = cache(
 
 export const getDashboardData = cache(async (user: SessionUser) => {
   return withCache(
-    `meridian:dashboard:v2:${user.id}:${user.role}`,
+    `meridian:dashboard:v3:${user.id}:${user.role}`,
     45,
     async () => {
   const accessibleProjectIds = await getAccessibleProjectIds(user);
   const projectFilter =
     accessibleProjectIds !== null ? { in: accessibleProjectIds } : undefined;
 
-  const activityWhere: Prisma.ActivityLogWhereInput | undefined =
-    user.role === "ADMIN"
-      ? undefined
-      : user.role === "MANAGER"
-      ? {
-          entityType: { in: ["TASK", "PROJECT"] },
-          ...(projectFilter ? { projectId: projectFilter } : {}),
-          actor: { role: { not: "ADMIN" } },
-        }
-      : {
-          entityType: "TASK",
-          ...(projectFilter ? { projectId: projectFilter } : {}),
-          actor: { role: { not: "ADMIN" } },
-          task: {
-            OR: [
-              { assigneeId: user.id },
-              { collaborators: { some: { userId: user.id } } },
-            ],
-          },
-        };
+  const NON_ADMIN_TASK_ACTIONS = [
+    "TASK_CREATED",
+    "STATUS_CHANGED",
+    "ASSIGNEE_CHANGED",
+    "SUBTASK_ADDED",
+    "COMMENT_ADDED",
+    "ATTACHMENT_UPLOADED",
+  ];
 
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -333,15 +321,29 @@ export const getDashboardData = cache(async (user: SessionUser) => {
       },
     }),
     getProjectsList(user),
-    prisma.activityLog.findMany({
-      where: activityWhere,
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      include: {
-        actor: { select: { id: true, name: true, avatarUrl: true, role: true } },
-        project: { select: { id: true, name: true, code: true, color: true } },
-      },
-    }),
+    user.role === "EMPLOYEE"
+      ? Promise.resolve([])
+      : prisma.activityLog.findMany({
+          where:
+            user.role === "ADMIN"
+              ? undefined
+              : {
+                  entityType: "TASK",
+                  action: { in: NON_ADMIN_TASK_ACTIONS },
+                  ...(projectFilter ? { projectId: projectFilter } : {}),
+                  actor: { role: { not: "ADMIN" } },
+                },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          include: {
+            actor: {
+              select: { id: true, name: true, avatarUrl: true, role: true },
+            },
+            project: {
+              select: { id: true, name: true, code: true, color: true },
+            },
+          },
+        }),
     prisma.task.findMany({
       where: {
         status: { not: "DONE" },

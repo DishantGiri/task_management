@@ -62,19 +62,32 @@ export async function GET(
           },
         },
       },
-      activityLogs: {
-        where:
-          user.role === "ADMIN"
-            ? undefined
-            : { actor: { role: { not: "ADMIN" } } },
-        orderBy: { createdAt: "desc" },
-        take: 25,
-        include: {
-          actor: {
-            select: { id: true, name: true, email: true, avatarUrl: true, designation: true, role: true },
-          },
-        },
-      },
+      activityLogs:
+        user.role === "EMPLOYEE"
+          ? false
+          : {
+              where:
+                user.role === "ADMIN"
+                  ? undefined
+                  : {
+                      entityType: "TASK",
+                      actor: { role: { not: "ADMIN" } },
+                    },
+              orderBy: { createdAt: "desc" },
+              take: 25,
+              include: {
+                actor: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatarUrl: true,
+                    designation: true,
+                    role: true,
+                  },
+                },
+              },
+            },
       _count: { select: { subtasks: true, comments: true, attachments: true } },
     },
   });
@@ -88,7 +101,12 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  return NextResponse.json({ data: task });
+  return NextResponse.json({
+    data: {
+      ...task,
+      activityLogs: Array.isArray(task.activityLogs) ? task.activityLogs : [],
+    },
+  });
 }
 
 export async function PATCH(

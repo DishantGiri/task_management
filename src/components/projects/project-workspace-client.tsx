@@ -311,10 +311,12 @@ export function ProjectWorkspaceClient({
             <Users className="h-3.5 w-3.5" />
             Members ({project.members.length})
           </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-1.5">
-            <Activity className="h-3.5 w-3.5" />
-            Activity ({activities.length})
-          </TabsTrigger>
+          {currentUserRole !== "EMPLOYEE" && (
+            <TabsTrigger value="activity" className="gap-1.5">
+              <Activity className="h-3.5 w-3.5" />
+              Activity ({activities.length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="tasks">

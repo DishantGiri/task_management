@@ -369,128 +369,132 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Team Workload + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Employee Workload */}
-        <Card className="lg:col-span-6">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <div>
-              <CardTitle>Employee Workload</CardTitle>
-              <p className="text-xs text-[#737987] mt-0.5">
-                Active vs. completed assignments per team member
-              </p>
-            </div>
-            <Link
-              href="/team"
-              className="text-xs font-medium text-[#635BDB] hover:text-[#5148C9]"
-            >
-              Manage team
-            </Link>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-[#EAECF0] border-t border-[#EAECF0]">
-              {data.workload.map((member) => {
-                const pct =
-                  member.total > 0
-                    ? Math.round((member.done / member.total) * 100)
-                    : 0;
-                return (
-                  <div
-                    key={member.id}
-                    className="flex items-center gap-3 px-5 py-3"
-                  >
-                    <UserAvatar
-                      name={member.name}
-                      avatarUrl={member.avatarUrl}
-                      size="md"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-[13px] font-medium text-[#20232B]">
-                          {member.name}
-                        </p>
-                        <div className="flex items-center gap-2 text-[11px] shrink-0">
-                          <span className="text-[#4B5563] font-medium">
-                            {member.active} active
-                          </span>
-                          <span className="text-[#16A34A]">
-                            {member.done} done
-                          </span>
-                          {member.overdue > 0 && (
-                            <span className="text-[#EF4444] font-medium">
-                              {member.overdue} overdue
+      {/* Team Workload + Recent Activity (Admin & Manager only — hidden for Employees) */}
+      {user.role !== "EMPLOYEE" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Employee Workload */}
+          <Card className="lg:col-span-6">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle>Employee Workload</CardTitle>
+                <p className="text-xs text-[#737987] mt-0.5">
+                  Active vs. completed assignments per team member
+                </p>
+              </div>
+              <Link
+                href="/team"
+                className="text-xs font-medium text-[#635BDB] hover:text-[#5148C9]"
+              >
+                Manage team
+              </Link>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-[#EAECF0] border-t border-[#EAECF0]">
+                {data.workload.map((member) => {
+                  const pct =
+                    member.total > 0
+                      ? Math.round((member.done / member.total) * 100)
+                      : 0;
+                  return (
+                    <div
+                      key={member.id}
+                      className="flex items-center gap-3 px-5 py-3"
+                    >
+                      <UserAvatar
+                        name={member.name}
+                        avatarUrl={member.avatarUrl}
+                        size="md"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-[13px] font-medium text-[#20232B]">
+                            {member.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-[11px] shrink-0">
+                            <span className="text-[#4B5563] font-medium">
+                              {member.active} active
                             </span>
+                            <span className="text-[#16A34A]">
+                              {member.done} done
+                            </span>
+                            {member.overdue > 0 && (
+                              <span className="text-[#EF4444] font-medium">
+                                {member.overdue} overdue
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2.5">
+                          <Progress value={pct} className="h-1.5 flex-1" />
+                          <span className="text-[11px] text-[#737987] w-20 truncate text-right">
+                            {member.department}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity */}
+          <Card className="lg:col-span-6">
+            <CardHeader className="pb-3">
+              <CardTitle>Recent Activity</CardTitle>
+              <p className="text-xs text-[#737987] mt-0.5">
+                Latest updates across projects and tasks
+              </p>
+            </CardHeader>
+            <CardContent className="p-0">
+              {data.recentActivities.length === 0 ? (
+                <p className="px-5 py-8 text-center text-xs text-[#737987]">
+                  No activity recorded yet.
+                </p>
+              ) : (
+                <div className="divide-y divide-[#EAECF0] border-t border-[#EAECF0]">
+                  {data.recentActivities.map((act) => (
+                    <div
+                      key={act.id}
+                      className="flex items-start gap-3 px-5 py-3"
+                    >
+                      <UserAvatar
+                        name={act.actor.name}
+                        avatarUrl={act.actor.avatarUrl}
+                        size="sm"
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12.5px] text-[#20232B] leading-snug">
+                          <span className="font-medium">{act.actor.name}</span>{" "}
+                          <span className="text-[#525866]">
+                            {act.description}
+                          </span>
+                        </p>
+                        <div className="mt-1 flex items-center gap-2 text-[11px] text-[#9CA3AF]">
+                          <span>{formatRelativeTime(act.createdAt)}</span>
+                          {act.project && (
+                            <>
+                              <span>·</span>
+                              <span className="inline-flex items-center gap-1 text-[#737987]">
+                                <span
+                                  className="h-1.5 w-1.5 rounded-full"
+                                  style={{ backgroundColor: act.project.color }}
+                                />
+                                {act.project.name}
+                              </span>
+                            </>
                           )}
                         </div>
                       </div>
-                      <div className="mt-1.5 flex items-center gap-2.5">
-                        <Progress value={pct} className="h-1.5 flex-1" />
-                        <span className="text-[11px] text-[#737987] w-20 truncate text-right">
-                          {member.department}
-                        </span>
-                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Activity */}
-        <Card className="lg:col-span-6">
-          <CardHeader className="pb-3">
-            <CardTitle>Recent Activity</CardTitle>
-            <p className="text-xs text-[#737987] mt-0.5">
-              Latest updates across projects and tasks
-            </p>
-          </CardHeader>
-          <CardContent className="p-0">
-            {data.recentActivities.length === 0 ? (
-              <p className="px-5 py-8 text-center text-xs text-[#737987]">
-                No activity recorded yet.
-              </p>
-            ) : (
-              <div className="divide-y divide-[#EAECF0] border-t border-[#EAECF0]">
-                {data.recentActivities.map((act) => (
-                  <div
-                    key={act.id}
-                    className="flex items-start gap-3 px-5 py-3"
-                  >
-                    <UserAvatar
-                      name={act.actor.name}
-                      avatarUrl={act.actor.avatarUrl}
-                      size="sm"
-                      className="mt-0.5"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12.5px] text-[#20232B] leading-snug">
-                        <span className="font-medium">{act.actor.name}</span>{" "}
-                        <span className="text-[#525866]">{act.description}</span>
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-[#9CA3AF]">
-                        <span>{formatRelativeTime(act.createdAt)}</span>
-                        {act.project && (
-                          <>
-                            <span>·</span>
-                            <span className="inline-flex items-center gap-1 text-[#737987]">
-                              <span
-                                className="h-1.5 w-1.5 rounded-full"
-                                style={{ backgroundColor: act.project.color }}
-                              />
-                              {act.project.name}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
