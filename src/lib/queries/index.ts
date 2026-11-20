@@ -271,12 +271,33 @@ export const getProjectsList = cache(
 
 export const getDashboardData = cache(async (user: SessionUser) => {
   return withCache(
-    `meridian:dashboard:${user.id}:${user.role}`,
+    `meridian:dashboard:v2:${user.id}:${user.role}`,
     45,
     async () => {
   const accessibleProjectIds = await getAccessibleProjectIds(user);
   const projectFilter =
     accessibleProjectIds !== null ? { in: accessibleProjectIds } : undefined;
+
+  const activityWhere: Prisma.ActivityLogWhereInput | undefined =
+    user.role === "ADMIN"
+      ? undefined
+      : user.role === "MANAGER"
+      ? {
+          entityType: { in: ["TASK", "PROJECT"] },
+          ...(projectFilter ? { projectId: projectFilter } : {}),
+          actor: { role: { not: "ADMIN" } },
+        }
+      : {
+          entityType: "TASK",
+          ...(projectFilter ? { projectId: projectFilter } : {}),
+          actor: { role: { not: "ADMIN" } },
+          task: {
+            OR: [
+              { assigneeId: user.id },
+              { collaborators: { some: { userId: user.id } } },
+            ],
+          },
+        };
 
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -313,15 +334,11 @@ export const getDashboardData = cache(async (user: SessionUser) => {
     }),
     getProjectsList(user),
     prisma.activityLog.findMany({
-      where: projectFilter
-        ? {
-            OR: [{ projectId: projectFilter }, { projectId: null }],
-          }
-        : undefined,
+      where: activityWhere,
       orderBy: { createdAt: "desc" },
       take: 10,
       include: {
-        actor: { select: { id: true, name: true, avatarUrl: true } },
+        actor: { select: { id: true, name: true, avatarUrl: true, role: true } },
         project: { select: { id: true, name: true, code: true, color: true } },
       },
     }),

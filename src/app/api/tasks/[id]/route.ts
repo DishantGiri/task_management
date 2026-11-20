@@ -63,6 +63,10 @@ export async function GET(
         },
       },
       activityLogs: {
+        where:
+          user.role === "ADMIN"
+            ? undefined
+            : { actor: { role: { not: "ADMIN" } } },
         orderBy: { createdAt: "desc" },
         take: 25,
         include: {

@@ -30,7 +30,17 @@ export default async function ProjectDetailPage({
     getWorkspaceReferenceData(user),
     canManageProject(user, id),
     prisma.activityLog.findMany({
-      where: { projectId: id },
+      where:
+        user.role === "ADMIN"
+          ? { projectId: id }
+          : {
+              projectId: id,
+              entityType:
+                user.role === "MANAGER"
+                  ? { in: ["TASK", "PROJECT"] }
+                  : "TASK",
+              actor: { role: { not: "ADMIN" } },
+            },
       orderBy: { createdAt: "desc" },
       take: 30,
       include: {
