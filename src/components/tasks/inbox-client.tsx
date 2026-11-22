@@ -45,8 +45,14 @@ export function InboxClient({
 
   const handleOpen = async (item: InboxNotification) => {
     if (!item.isRead) {
+      const nextUnread = Math.max(0, unreadCount - 1);
       setItems((prev) =>
         prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
+      );
+      window.dispatchEvent(
+        new CustomEvent("meridian:notifications-updated", {
+          detail: { unreadCount: nextUnread, readId: item.id },
+        })
       );
       await markNotificationReadAction(item.id);
     }
@@ -57,6 +63,11 @@ export function InboxClient({
 
   const handleMarkAll = async () => {
     setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    window.dispatchEvent(
+      new CustomEvent("meridian:notifications-updated", {
+        detail: { unreadCount: 0, markAll: true },
+      })
+    );
     const res = await markAllNotificationsReadAction();
     if (res.error) {
       toast.error(res.error);

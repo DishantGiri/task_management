@@ -145,6 +145,40 @@ export function AppShell({
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
+  // Instant sync when notifications are read on the /inbox page
+  useEffect(() => {
+    const onNotifUpdated = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          unreadCount?: number;
+          readId?: string;
+          markAll?: boolean;
+        }>
+      ).detail;
+      if (!detail) return;
+
+      if (typeof detail.unreadCount === "number") {
+        setUnreadCount(Math.max(0, detail.unreadCount));
+      }
+      if (detail.markAll) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      } else if (detail.readId) {
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n.id === detail.readId ? { ...n, isRead: true } : n
+          )
+        );
+      }
+    };
+
+    window.addEventListener("meridian:notifications-updated", onNotifUpdated);
+    return () =>
+      window.removeEventListener(
+        "meridian:notifications-updated",
+        onNotifUpdated
+      );
+  }, []);
+
   // Warm the Next.js router cache for all primary sidebar routes
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -189,16 +223,24 @@ export function AppShell({
   }, [searchQuery]);
 
   const markAsRead = async (id: string, link?: string | null) => {
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-    );
-    setUnreadCount((c) => Math.max(0, c - 1));
+    const target = notifications.find((n) => n.id === id);
+    const wasUnread = target ? !target.isRead : false;
+
+    if (wasUnread) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    }
+
     setNotifOpen(false);
+    if (wasUnread) {
+      fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      }).catch(() => {});
+    }
     if (link) router.push(link);
   };
 
