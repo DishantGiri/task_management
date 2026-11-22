@@ -230,15 +230,17 @@ export async function updateTaskAction(values: unknown) {
     if (data.status !== undefined) {
       updateData.status = data.status;
       updateData.completedAt = data.status === "DONE" ? new Date() : null;
-      if (existing._count.subtasks === 0) {
+      if (data.status === "DONE") {
+        updateData.progress = 100;
+      } else if (existing._count.subtasks === 0) {
         updateData.progress =
-          data.status === "DONE"
-            ? 100
-            : data.status === "IN_REVIEW"
+          data.status === "IN_REVIEW"
             ? 75
             : data.status === "IN_PROGRESS"
             ? 40
             : 0;
+      } else {
+        updateData.progress = Math.min(existing.progress, 90);
       }
     }
 

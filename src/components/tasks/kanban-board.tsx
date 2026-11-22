@@ -153,9 +153,14 @@ function KanbanTaskCard({
               <GitBranch className="h-3 w-3" />
               {doneSubtasks}/{totalSubtasks} subtasks
             </span>
-            <span className="font-medium text-[#20232B]">{task.progress}%</span>
+            <span className="font-medium text-[#20232B]">
+              {task.status === "DONE" ? 100 : Math.min(task.progress, 90)}%
+            </span>
           </div>
-          <Progress value={task.progress} className="h-1" />
+          <Progress
+            value={task.status === "DONE" ? 100 : Math.min(task.progress, 90)}
+            className="h-1"
+          />
         </div>
       )}
 

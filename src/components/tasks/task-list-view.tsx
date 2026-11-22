@@ -102,36 +102,27 @@ export function TaskListView({
             s.id === taskId ? { ...s, status, progress: nextProgress } : s
           );
           const doneCount = updatedSubs.filter((s) => s.status === "DONE").length;
-          const anyStarted = updatedSubs.some((s) => s.status !== "TODO");
-          const allDone = doneCount === updatedSubs.length;
-          const avg = Math.round(
-            updatedSubs.reduce(
-              (acc, s) =>
-                acc +
-                (s.status === "DONE"
-                  ? 100
-                  : s.status === "IN_REVIEW"
-                  ? 75
-                  : s.status === "IN_PROGRESS"
-                  ? 40
-                  : 0),
-              0
-            ) / updatedSubs.length
-          );
-          const nextParentStatus: TaskStatus = allDone
-            ? "DONE"
-            : t.status === "DONE"
-            ? anyStarted
-              ? "IN_PROGRESS"
-              : "TODO"
-            : t.status === "TODO" && anyStarted
-            ? "IN_PROGRESS"
-            : t.status;
+          const rawAvg =
+            doneCount === updatedSubs.length
+              ? 100
+              : Math.round(
+                  updatedSubs.reduce(
+                    (acc, s) =>
+                      acc +
+                      (s.status === "DONE"
+                        ? 100
+                        : s.status === "IN_REVIEW"
+                        ? 75
+                        : s.status === "IN_PROGRESS"
+                        ? 40
+                        : 0),
+                    0
+                  ) / updatedSubs.length
+                );
           return {
             ...t,
-            status: nextParentStatus,
             subtasks: updatedSubs,
-            progress: allDone ? 100 : avg,
+            progress: t.status === "DONE" ? 100 : Math.min(rawAvg, 90),
           };
         })
       );

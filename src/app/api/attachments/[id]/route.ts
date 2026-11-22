@@ -4,8 +4,18 @@ import path from "path";
 import { prisma } from "@/lib/prisma";
 import { canAccessProject, getCurrentUser } from "@/lib/permissions";
 
+function isSafeInlinePreview(mimeType: string): boolean {
+  const m = (mimeType || "").toLowerCase();
+  if (m.startsWith("image/") && !m.includes("svg")) return true;
+  if (m === "application/pdf") return true;
+  if (m.startsWith("video/") || m.startsWith("audio/")) return true;
+  if (m === "text/plain" || m === "text/csv" || m === "application/json")
+    return true;
+  return false;
+}
+
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentUser();
@@ -37,13 +47,20 @@ export async function GET(
 
     const fileBytes = await readFile(resolvedPath);
     const safeDownloadName = attachment.fileName.replace(/["\r\n]/g, "");
+    const contentType = attachment.mimeType || "application/octet-stream";
+    const wantsPreview = request.nextUrl.searchParams.get("preview") === "1";
+    const disposition =
+      wantsPreview && isSafeInlinePreview(contentType) ? "inline" : "attachment";
 
     return new NextResponse(fileBytes, {
       status: 200,
       headers: {
-        "Content-Type": attachment.mimeType || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${safeDownloadName}"`,
+        "Content-Type": contentType,
+        "Content-Disposition": `${disposition}; filename="${safeDownloadName}"`,
         "X-Content-Type-Options": "nosniff",
+        ...(wantsPreview
+          ? { "Cache-Control": "private, max-age=300" }
+          : {}),
       },
     });
   } catch {

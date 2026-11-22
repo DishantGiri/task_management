@@ -199,7 +199,7 @@ export async function getTasksList(
 export const getProjectsList = cache(
   async (user: SessionUser): Promise<ProjectListItem[]> => {
     return withCache(
-      `meridian:projects:v2:${user.id}:${user.role}`,
+      `meridian:projects:v3:${user.id}:${user.role}`,
       60,
       async () => {
         const accessibleProjectIds = await getAccessibleProjectIds(user);
@@ -227,31 +227,15 @@ export const getProjectsList = cache(
 
         return projects.map((p) => {
           const total = p.tasks.length;
-          const completed = p.tasks.filter(
-            (t) => t.status === "DONE" || t.progress === 100
-          ).length;
+          const completed = p.tasks.filter((t) => t.status === "DONE").length;
           const inProgress = p.tasks.filter(
-            (t) =>
-              t.status !== "DONE" &&
-              t.progress < 100 &&
-              (t.status === "IN_PROGRESS" || t.status === "IN_REVIEW")
+            (t) => t.status === "IN_PROGRESS" || t.status === "IN_REVIEW"
           ).length;
           const overdue = p.tasks.filter(
-            (t) =>
-              t.status !== "DONE" &&
-              t.progress < 100 &&
-              t.dueDate &&
-              t.dueDate < todayStart
+            (t) => t.status !== "DONE" && t.dueDate && t.dueDate < todayStart
           ).length;
           const progress =
-            total === 0
-              ? 0
-              : Math.round(
-                  p.tasks.reduce(
-                    (acc, t) => acc + (t.status === "DONE" ? 100 : t.progress),
-                    0
-                  ) / total
-                );
+            total === 0 ? 0 : Math.round((completed / total) * 100);
 
           return {
             id: p.id,

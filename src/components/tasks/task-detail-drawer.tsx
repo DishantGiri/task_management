@@ -11,6 +11,9 @@ import {
   CheckCircle2,
   Circle,
   Download,
+  ExternalLink,
+  Eye,
+  FileText,
   GitBranch,
   Link2,
   Loader2,
@@ -111,9 +114,43 @@ export function TaskDetailDrawer({
   const [postingComment, setPostingComment] = useState(false);
   const [showMentionList, setShowMentionList] = useState(false);
 
-  // File upload state
+  // File upload & preview state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<
+    TaskDetailData["attachments"][number] | null
+  >(null);
+  const [previewTextContent, setPreviewTextContent] = useState<string | null>(
+    null
+  );
+  const [loadingPreviewText, setLoadingPreviewText] = useState(false);
+
+  const openAttachmentPreview = async (
+    att: TaskDetailData["attachments"][number]
+  ) => {
+    setPreviewAttachment(att);
+    setPreviewTextContent(null);
+    const mime = (att.mimeType || "").toLowerCase();
+    if (
+      mime === "text/plain" ||
+      mime === "text/csv" ||
+      mime === "application/json" ||
+      att.fileName.toLowerCase().endsWith(".md") ||
+      att.fileName.toLowerCase().endsWith(".txt")
+    ) {
+      setLoadingPreviewText(true);
+      try {
+        const res = await fetch(`${att.fileUrl}?preview=1`);
+        if (res.ok) {
+          setPreviewTextContent(await res.text());
+        }
+      } catch {
+        setPreviewTextContent("Unable to load text preview.");
+      } finally {
+        setLoadingPreviewText(false);
+      }
+    }
+  };
 
   // Delete dialog
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1119,44 +1156,71 @@ export function TaskDetailDrawer({
                     </div>
                   ) : (
                     <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white">
-                      {task.attachments.map((att) => (
-                        <div
-                          key={att.id}
-                          className="flex items-center justify-between gap-3 px-3 py-2.5"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <Paperclip className="h-4 w-4 shrink-0 text-[#737987]" />
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-medium text-[#20232B]">
-                                {att.fileName}
-                              </p>
-                              <p className="text-[11px] text-[#9CA3AF]">
-                                {formatFileSize(att.fileSize)} · Uploaded by{" "}
-                                {att.uploadedBy.name} ·{" "}
-                                {formatRelativeTime(att.createdAt)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <a
-                              href={att.fileUrl}
-                              download
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#737987] hover:bg-[#F3F4F6] hover:text-[#20232B]"
-                              title="Download"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                            </a>
+                      {task.attachments.map((att) => {
+                        const isImage =
+                          (att.mimeType || "").toLowerCase().startsWith("image/") &&
+                          !(att.mimeType || "").toLowerCase().includes("svg");
+                        return (
+                          <div
+                            key={att.id}
+                            className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-[#F7F8FA]/80 transition-colors"
+                          >
                             <button
                               type="button"
-                              onClick={() => handleDeleteAttachment(att.id)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#737987] hover:bg-red-50 hover:text-red-600"
-                              title="Delete file"
+                              onClick={() => openAttachmentPreview(att)}
+                              className="flex items-center gap-2.5 min-w-0 flex-1 text-left group"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              {isImage ? (
+                                <img
+                                  src={`${att.fileUrl}?preview=1`}
+                                  alt={att.fileName}
+                                  className="h-9 w-9 shrink-0 rounded border border-[#EAECF0] object-cover bg-[#F7F8FA]"
+                                />
+                              ) : (
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[#EAECF0] bg-[#F7F8FA] text-[#737987]">
+                                  <Paperclip className="h-4 w-4" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-medium text-[#20232B] group-hover:text-[#635BDB] transition-colors">
+                                  {att.fileName}
+                                </p>
+                                <p className="text-[11px] text-[#9CA3AF]">
+                                  {formatFileSize(att.fileSize)} · Uploaded by{" "}
+                                  {att.uploadedBy.name} ·{" "}
+                                  {formatRelativeTime(att.createdAt)}
+                                </p>
+                              </div>
                             </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => openAttachmentPreview(att)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#737987] hover:bg-[#F0EFFF] hover:text-[#635BDB]"
+                                title="Preview"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+                              <a
+                                href={att.fileUrl}
+                                download
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#737987] hover:bg-[#F3F4F6] hover:text-[#20232B]"
+                                title="Download"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#737987] hover:bg-red-50 hover:text-red-600"
+                                title="Delete file"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1308,6 +1372,102 @@ export function TaskDetailDrawer({
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Attachment Preview Modal */}
+      <Dialog
+        open={!!previewAttachment}
+        onOpenChange={(open) => !open && setPreviewAttachment(null)}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">
+              {previewAttachment?.fileName}
+            </DialogTitle>
+            <DialogDescription>
+              {previewAttachment
+                ? `${formatFileSize(previewAttachment.fileSize)} · Uploaded by ${previewAttachment.uploadedBy.name}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewAttachment && (
+            <div className="flex-1 min-h-[260px] overflow-auto rounded-lg border border-[#EAECF0] bg-[#F7F8FA] flex items-center justify-center p-3">
+              {(previewAttachment.mimeType || "")
+                .toLowerCase()
+                .startsWith("image/") &&
+              !(previewAttachment.mimeType || "")
+                .toLowerCase()
+                .includes("svg") ? (
+                <img
+                  src={`${previewAttachment.fileUrl}?preview=1`}
+                  alt={previewAttachment.fileName}
+                  className="max-h-[68vh] max-w-full rounded object-contain shadow-subtle"
+                />
+              ) : (previewAttachment.mimeType || "").toLowerCase() ===
+                "application/pdf" ? (
+                <iframe
+                  src={`${previewAttachment.fileUrl}?preview=1`}
+                  title={previewAttachment.fileName}
+                  className="h-[68vh] w-full rounded bg-white"
+                />
+              ) : (previewAttachment.mimeType || "")
+                  .toLowerCase()
+                  .startsWith("video/") ? (
+                <video
+                  src={`${previewAttachment.fileUrl}?preview=1`}
+                  controls
+                  className="max-h-[68vh] max-w-full rounded"
+                />
+              ) : (previewAttachment.mimeType || "")
+                  .toLowerCase()
+                  .startsWith("audio/") ? (
+                <audio
+                  src={`${previewAttachment.fileUrl}?preview=1`}
+                  controls
+                  className="w-full max-w-md"
+                />
+              ) : loadingPreviewText ? (
+                <Loader2 className="h-5 w-5 animate-spin text-[#635BDB]" />
+              ) : previewTextContent !== null ? (
+                <pre className="w-full max-h-[65vh] overflow-auto rounded bg-white p-4 text-xs font-mono text-[#20232B] whitespace-pre-wrap">
+                  {previewTextContent}
+                </pre>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                  <FileText className="h-10 w-10 text-[#9CA3AF]" />
+                  <p className="text-sm font-medium text-[#20232B]">
+                    Inline preview not available for this file type
+                  </p>
+                  <p className="text-xs text-[#737987]">
+                    Download the file to open it on your device.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {previewAttachment && (
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button variant="outline" asChild>
+                <a
+                  href={`${previewAttachment.fileUrl}?preview=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open in New Tab
+                </a>
+              </Button>
+              <Button asChild>
+                <a href={previewAttachment.fileUrl} download>
+                  <Download className="h-3.5 w-3.5" />
+                  Download
+                </a>
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
