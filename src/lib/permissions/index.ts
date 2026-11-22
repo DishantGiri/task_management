@@ -337,18 +337,39 @@ export async function recalculateParentProgress(
   };
 
   const completedCount = subtasks.filter((s) => s.status === "DONE").length;
+  const anyStarted = subtasks.some((s) => s.status !== "TODO");
   const weightedSum = subtasks.reduce(
-    (sum, s) => sum + (s.status === "DONE" ? 100 : Math.max(s.progress, statusScore(s.status))),
+    (sum, s) =>
+      sum + (s.status === "DONE" ? 100 : Math.max(s.progress, statusScore(s.status))),
     0
   );
-  const progress =
-    completedCount === subtasks.length
-      ? 100
-      : Math.round(weightedSum / subtasks.length);
+  const allDone = completedCount === subtasks.length;
+  const progress = allDone ? 100 : Math.round(weightedSum / subtasks.length);
+
+  const currentParent = await prisma.task.findUnique({
+    where: { id: parentId },
+    select: { status: true, completedAt: true },
+  });
+
+  const updateData: {
+    progress: number;
+    status?: TaskStatus;
+    completedAt?: Date | null;
+  } = { progress };
+
+  if (allDone) {
+    updateData.status = "DONE";
+    updateData.completedAt = currentParent?.completedAt ?? new Date();
+  } else if (currentParent?.status === "DONE") {
+    updateData.status = anyStarted ? "IN_PROGRESS" : "TODO";
+    updateData.completedAt = null;
+  } else if (currentParent?.status === "TODO" && anyStarted) {
+    updateData.status = "IN_PROGRESS";
+  }
 
   const parent = await prisma.task.update({
     where: { id: parentId },
-    data: { progress },
+    data: updateData,
     select: { parentId: true },
   });
 
