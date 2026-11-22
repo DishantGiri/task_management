@@ -196,6 +196,12 @@ export function TaskDetailDrawer({
     task?.assigneeId === currentUserId ||
     task?.collaborators.some((c) => c.user.id === currentUserId);
 
+  const canDeleteAttachment =
+    currentUserRole === "ADMIN" ||
+    currentUserRole === "MANAGER" ||
+    task?.project.managerId === currentUserId ||
+    task?.assigneeId === currentUserId;
+
   const handleFieldUpdate = async (patch: Record<string, unknown>) => {
     if (!task) return;
     setSaving(true);
@@ -1209,14 +1215,16 @@ export function TaskDetailDrawer({
                               >
                                 <Download className="h-3.5 w-3.5" />
                               </a>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteAttachment(att.id)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#737987] hover:bg-red-50 hover:text-red-600"
-                                title="Delete file"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              {canDeleteAttachment && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAttachment(att.id)}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#737987] hover:bg-red-50 hover:text-red-600"
+                                  title="Delete file"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         );

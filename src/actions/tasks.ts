@@ -562,13 +562,39 @@ export async function deleteAttachmentAction(attachmentId: string) {
     const user = await requireAuth();
     const attachment = await prisma.attachment.findUnique({
       where: { id: attachmentId },
-      include: { task: { select: { id: true, projectId: true } } },
+      include: {
+        task: {
+          select: {
+            id: true,
+            projectId: true,
+            assigneeId: true,
+            project: {
+              select: {
+                managerId: true,
+                members: {
+                  where: { userId: user.id },
+                  select: { role: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
     if (!attachment) return { error: "Attachment not found." };
 
-    const perm = await canEditTask(user, attachment.taskId);
-    if (!perm.allowed && attachment.uploadedById !== user.id) {
-      return { error: "You do not have permission to delete this file." };
+    const isAdmin = user.role === "ADMIN";
+    const isProjectManager =
+      attachment.task.project.managerId === user.id ||
+      (user.role === "MANAGER" && attachment.task.project.members.length > 0) ||
+      attachment.task.project.members.some((m) => m.role === "LEAD");
+    const isAssignedEmployee = attachment.task.assigneeId === user.id;
+
+    if (!isAdmin && !isProjectManager && !isAssignedEmployee) {
+      return {
+        error:
+          "Only the assigned employee, Project Manager, or Admin can delete this attachment.",
+      };
     }
 
     await prisma.attachment.delete({ where: { id: attachmentId } });
@@ -580,6 +606,7 @@ export async function deleteAttachmentAction(attachmentId: string) {
       // Ignore if file already missing on disk
     }
 
+    await invalidateWorkspaceCache();
     revalidatePath("/tasks");
     revalidatePath(`/projects/${attachment.task.projectId}`);
     return { success: true };

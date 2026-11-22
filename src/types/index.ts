@@ -93,6 +93,7 @@ export interface TaskListItem {
     code: string;
     name: string;
     color: string;
+    managerId?: string;
   };
   assignee: UserSummary | null;
   collaborators: { user: UserSummary }[];
