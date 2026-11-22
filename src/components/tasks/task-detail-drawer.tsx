@@ -42,6 +42,7 @@ import {
   formatCompactDate,
   formatFileSize,
   formatRelativeTime,
+  getDisplayTaskProgress,
   isTaskOverdue,
 } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -616,9 +617,12 @@ export function TaskDetailDrawer({
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-xs text-[#737987]">Progress</span>
                     <div className="flex items-center gap-2 w-[150px]">
-                      <Progress value={task.progress} className="h-2 flex-1" />
+                      <Progress
+                        value={getDisplayTaskProgress(task)}
+                        className="h-2 flex-1"
+                      />
                       <span className="text-xs font-semibold text-[#20232B] w-9 text-right">
-                        {task.progress}%
+                        {getDisplayTaskProgress(task)}%
                       </span>
                     </div>
                   </div>
@@ -918,9 +922,12 @@ export function TaskDetailDrawer({
 
                     {totalSubtasks > 0 && (
                       <div className="flex items-center gap-3">
-                        <Progress value={task.progress} className="h-1.5 flex-1" />
+                        <Progress
+                          value={getDisplayTaskProgress(task)}
+                          className="h-1.5 flex-1"
+                        />
                         <span className="text-[11px] font-medium text-[#737987]">
-                          {task.progress}% auto-calculated
+                          {getDisplayTaskProgress(task)}% auto-calculated
                         </span>
                       </div>
                     )}

@@ -16,7 +16,13 @@ import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
 import type { TaskListItem } from "@/types";
 import { updateTaskAction } from "@/actions/tasks";
-import { cn, formatCompactDate, isTaskOverdue } from "@/lib/utils";
+import {
+  cn,
+  formatCompactDate,
+  getDisplayTaskProgress,
+  getStatusProgressScore,
+  isTaskOverdue,
+} from "@/lib/utils";
 import { PriorityBadge } from "@/components/shared/badges";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
@@ -89,7 +95,7 @@ export function TaskListView({
             ? {
                 ...t,
                 status,
-                progress: t.subtasks.length === 0 ? nextProgress : t.progress,
+                progress: getDisplayTaskProgress({ ...t, status }),
               }
             : t
         )
@@ -314,9 +320,12 @@ export function TaskListView({
                     {/* Progress */}
                     <td className="py-2.5 pl-3 pr-4">
                       <div className="flex items-center gap-2">
-                        <Progress value={task.progress} className="h-1.5 flex-1" />
+                        <Progress
+                          value={getDisplayTaskProgress(task)}
+                          className="h-1.5 flex-1"
+                        />
                         <span className="text-[11px] font-medium text-[#525866] w-8 text-right">
-                          {task.progress}%
+                          {getDisplayTaskProgress(task)}%
                         </span>
                       </div>
                     </td>
@@ -438,7 +447,7 @@ export function TaskListView({
                             </span>
                           </td>
                           <td className="py-2 pl-3 pr-4 text-right text-[11px] text-[#737987]">
-                            {sub.progress}%
+                            {getStatusProgressScore(sub.status)}%
                           </td>
                         </tr>
                       );

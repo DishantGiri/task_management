@@ -39,6 +39,7 @@ import { moveTaskKanbanAction } from "@/actions/tasks";
 import {
   cn,
   formatCompactDate,
+  getDisplayTaskProgress,
   isTaskOverdue,
   STATUS_CONFIG,
 } from "@/lib/utils";
@@ -154,11 +155,11 @@ function KanbanTaskCard({
               {doneSubtasks}/{totalSubtasks} subtasks
             </span>
             <span className="font-medium text-[#20232B]">
-              {task.status === "DONE" ? 100 : Math.min(task.progress, 90)}%
+              {getDisplayTaskProgress(task)}%
             </span>
           </div>
           <Progress
-            value={task.status === "DONE" ? 100 : Math.min(task.progress, 90)}
+            value={getDisplayTaskProgress(task)}
             className="h-1"
           />
         </div>
@@ -365,16 +366,7 @@ export function KanbanBoard({
           ? {
               ...t,
               status: targetStatus,
-              progress:
-                t.subtasks.length === 0
-                  ? targetStatus === "DONE"
-                    ? 100
-                    : targetStatus === "IN_REVIEW"
-                    ? 75
-                    : targetStatus === "IN_PROGRESS"
-                    ? 40
-                    : 0
-                  : t.progress,
+              progress: getDisplayTaskProgress({ ...t, status: targetStatus }),
             }
           : t
       );

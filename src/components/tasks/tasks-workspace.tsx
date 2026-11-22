@@ -19,7 +19,7 @@ import type {
   TaskListItem,
   UserSummary,
 } from "@/types";
-import { cn } from "@/lib/utils";
+import { cn, getDisplayTaskProgress } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -148,7 +148,7 @@ export function TasksWorkspace({
         case "title":
           return a.title.localeCompare(b.title);
         case "progress":
-          return b.progress - a.progress;
+          return getDisplayTaskProgress(b) - getDisplayTaskProgress(a);
         default:
           return (
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()

@@ -55,6 +55,50 @@ export function formatFileSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+export function getStatusProgressScore(status: string): number {
+  switch (status) {
+    case "DONE":
+      return 100;
+    case "IN_REVIEW":
+      return 75;
+    case "IN_PROGRESS":
+      return 40;
+    default:
+      return 0;
+  }
+}
+
+export function getDisplayTaskProgress(task: {
+  status: string;
+  progress?: number | null;
+  subtasks?: Array<{ status: string; progress?: number | null }>;
+}): number {
+  if (task.status === "DONE") return 100;
+
+  if (task.subtasks && task.subtasks.length > 0) {
+    const doneCount = task.subtasks.filter((s) => s.status === "DONE").length;
+    const raw =
+      doneCount === task.subtasks.length
+        ? 100
+        : Math.round(
+            task.subtasks.reduce(
+              (sum, s) => sum + getStatusProgressScore(s.status),
+              0
+            ) / task.subtasks.length
+          );
+    return Math.min(raw, 90);
+  }
+
+  if (Array.isArray(task.subtasks)) {
+    return getStatusProgressScore(task.status);
+  }
+
+  return Math.min(
+    Math.max(task.progress ?? 0, getStatusProgressScore(task.status)),
+    90
+  );
+}
+
 export const STATUS_CONFIG = {
   TODO: {
     label: "To Do",

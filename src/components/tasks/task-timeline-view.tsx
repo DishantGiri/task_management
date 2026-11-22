@@ -12,7 +12,7 @@ import {
 } from "date-fns";
 import { Link2 } from "lucide-react";
 import type { TaskListItem } from "@/types";
-import { cn, STATUS_CONFIG } from "@/lib/utils";
+import { cn, getDisplayTaskProgress, STATUS_CONFIG } from "@/lib/utils";
 import { UserAvatar } from "@/components/ui/avatar";
 
 export function TaskTimelineView({
@@ -214,7 +214,7 @@ export function TaskTimelineView({
                     <div
                       className="absolute inset-y-0 left-0 opacity-20"
                       style={{
-                        width: `${Math.max(12, task.progress)}%`,
+                        width: `${Math.max(12, getDisplayTaskProgress(task))}%`,
                         backgroundColor: statusColor,
                       }}
                     />
@@ -223,7 +223,7 @@ export function TaskTimelineView({
                         {task.title}
                       </span>
                       <span className="text-[10px] font-semibold text-[#525866] shrink-0">
-                        {task.progress}%
+                        {getDisplayTaskProgress(task)}%
                       </span>
                     </div>
                   </button>

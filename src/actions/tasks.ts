@@ -303,6 +303,10 @@ export async function updateTaskAction(values: unknown) {
       }
     }
 
+    if (data.status !== undefined && existing._count.subtasks > 0) {
+      await recalculateParentProgress(data.id);
+    }
+
     if (existing.parentId) {
       await recalculateParentProgress(existing.parentId);
     }
