@@ -361,7 +361,10 @@ export const getDashboardData = cache(async (user: SessionUser) => {
         role: true,
         department: { select: { name: true } },
         assignedTasks: {
-          where: projectFilter ? { projectId: projectFilter } : undefined,
+          where: {
+            parentId: null,
+            ...(projectFilter ? { projectId: projectFilter } : {}),
+          },
           select: { id: true, status: true, dueDate: true },
         },
       },

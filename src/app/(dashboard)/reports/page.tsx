@@ -15,7 +15,10 @@ export default async function ReportsPage() {
 
   const [tasks, projects, users, departments] = await Promise.all([
     prisma.task.findMany({
-      where: projectFilter ? { projectId: projectFilter } : undefined,
+      where: {
+        parentId: null,
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
       select: {
         id: true,
         status: true,
@@ -34,7 +37,10 @@ export default async function ReportsPage() {
         name: true,
         departmentId: true,
         assignedTasks: {
-          where: projectFilter ? { projectId: projectFilter } : undefined,
+          where: {
+            parentId: null,
+            ...(projectFilter ? { projectId: projectFilter } : {}),
+          },
           select: { id: true, status: true, dueDate: true },
         },
       },

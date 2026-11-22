@@ -500,7 +500,7 @@ export function TaskDetailDrawer({
               </div>
 
               {/* Scrollable Body */}
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-5 space-y-6">
                 {/* Parent Breadcrumb if subtask */}
                 {task.parent && (
                   <button
@@ -871,7 +871,7 @@ export function TaskDetailDrawer({
                     <div
                       onClick={() => canFullEdit && setEditingDesc(true)}
                       className={cn(
-                        "rounded-md border border-[#EAECF0] bg-white p-3.5 text-[13px] leading-relaxed text-[#374151] whitespace-pre-wrap",
+                        "rounded-md border border-[#EAECF0] bg-white p-3.5 text-[13px] leading-relaxed text-[#374151] whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
                         canFullEdit && "cursor-text hover:border-[#D1D5DB]"
                       )}
                     >
@@ -1249,23 +1249,23 @@ export function TaskDetailDrawer({
                         </p>
                       ) : (
                         task.comments.map((c) => (
-                          <div key={c.id} className="flex gap-2.5">
+                          <div key={c.id} className="flex gap-2.5 min-w-0">
                             <UserAvatar
                               name={c.author.name}
                               avatarUrl={c.author.avatarUrl}
                               size="sm"
-                              className="mt-0.5"
+                              className="mt-0.5 shrink-0"
                             />
-                            <div className="flex-1 rounded-lg border border-[#EAECF0] bg-[#F7F8FA]/70 px-3.5 py-2.5">
+                            <div className="flex-1 min-w-0 overflow-hidden rounded-lg border border-[#EAECF0] bg-[#F7F8FA]/70 px-3.5 py-2.5">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-semibold text-[#20232B]">
+                                <span className="truncate text-xs font-semibold text-[#20232B]">
                                   {c.author.name}
                                 </span>
-                                <span className="text-[11px] text-[#9CA3AF]">
+                                <span className="shrink-0 text-[11px] text-[#9CA3AF]">
                                   {formatRelativeTime(c.createdAt)}
                                 </span>
                               </div>
-                              <p className="mt-1 text-[13px] leading-relaxed text-[#374151] whitespace-pre-wrap">
+                              <p className="mt-1 text-[13px] leading-relaxed text-[#374151] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                                 {renderCommentText(c.content)}
                               </p>
                             </div>
@@ -1350,7 +1350,7 @@ export function TaskDetailDrawer({
                               size="xs"
                               className="mt-0.5"
                             />
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0 break-words [overflow-wrap:anywhere]">
                               <span className="font-medium text-[#20232B]">
                                 {log.actor.name}
                               </span>{" "}
