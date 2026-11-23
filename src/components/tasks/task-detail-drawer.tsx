@@ -125,7 +125,10 @@ export function TaskDetailDrawer({
   const [subDueDate, setSubDueDate] = useState("");
   const [addingSubtask, setAddingSubtask] = useState(false);
 
-  // Comment state
+  // Comment & drawer subsection state
+  const [activeSection, setActiveSection] = useState<"details" | "comments">(
+    "details"
+  );
   const [commentText, setCommentText] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [showMentionList, setShowMentionList] = useState(false);
@@ -232,6 +235,7 @@ export function TaskDetailDrawer({
   useEffect(() => {
     if (open && taskId) {
       needsBoardRefreshRef.current = false;
+      setActiveSection("details");
       loadTask(taskId);
       setEditingDesc(false);
       setShowSubtaskForm(false);
@@ -793,7 +797,48 @@ export function TaskDetailDrawer({
                 </div>
               )}
 
-              {/* Scrollable Body */}
+              {/* Sticky Subsection Navigation Bar (Agile Daily Workflow) */}
+              <div className="flex items-center gap-1 border-b border-[#EAECF0] bg-[#FAFBFC] px-6 py-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveSection("details")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    activeSection === "details"
+                      ? "bg-white text-[#20232B] shadow-subtle border border-[#EAECF0]"
+                      : "text-[#737987] hover:text-[#20232B] hover:bg-white/60"
+                  )}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection("comments")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    activeSection === "comments"
+                      ? "bg-white text-[#5148C9] shadow-subtle border border-[#DFDCFF]"
+                      : "text-[#737987] hover:text-[#20232B] hover:bg-white/60"
+                  )}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Comments
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.2 text-[10.5px] font-semibold",
+                      activeSection === "comments"
+                        ? "bg-[#F0EFFF] text-[#5148C9]"
+                        : "bg-[#EAECF0] text-[#525866]"
+                    )}
+                  >
+                    {task.comments.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* DETAILS SUBSECTION */}
+              {activeSection === "details" && (
               <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-5 space-y-6">
                 {/* Parent Breadcrumb if subtask */}
                 {task.parent && (
@@ -1513,64 +1558,95 @@ export function TaskDetailDrawer({
                     </div>
                   )}
                 </div>
+              </div>
+              )}
 
-                {/* Comments & Activity Tabs */}
-                <Tabs defaultValue="comments" className="w-full">
-                  <TabsList className="w-full justify-start">
-                    <TabsTrigger value="comments" className="gap-1.5">
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      Comments ({task.comments.length})
-                    </TabsTrigger>
-                    {currentUserRole !== "EMPLOYEE" && (
-                      <TabsTrigger value="activity" className="gap-1.5">
-                        <Activity className="h-3.5 w-3.5" />
-                        Activity ({task.activityLogs.length})
-                      </TabsTrigger>
-                    )}
-                  </TabsList>
-
-                  <TabsContent value="comments" className="space-y-4">
-                    {/* Comments List */}
-                    <div className="space-y-3">
-                      {task.comments.length === 0 ? (
-                        <p className="py-4 text-center text-xs text-[#737987]">
-                          No comments yet. Use @name to mention a teammate.
+              {/* COMMENTS SUBSECTION (Pinned Agile Composer + Scrollable Thread) */}
+              {activeSection === "comments" && (
+                <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+                  {/* Scrollable Comments Thread */}
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-3">
+                    {task.comments.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-14 text-center">
+                        <MessageSquare className="h-7 w-7 text-[#CBD5E1] mb-2" />
+                        <p className="text-sm font-medium text-[#20232B]">
+                          No comments yet
                         </p>
-                      ) : (
-                        task.comments.map((c) => (
-                          <div key={c.id} className="flex gap-2.5 min-w-0">
-                            <UserAvatar
-                              name={c.author.name}
-                              avatarUrl={c.author.avatarUrl}
-                              size="sm"
-                              className="mt-0.5 shrink-0"
-                            />
-                            <div className="flex-1 min-w-0 overflow-hidden rounded-lg border border-[#EAECF0] bg-[#F7F8FA]/70 px-3.5 py-2.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="truncate text-xs font-semibold text-[#20232B]">
-                                  {c.author.name}
-                                </span>
-                                <span className="shrink-0 text-[11px] text-[#9CA3AF]">
-                                  {formatRelativeTime(c.createdAt)}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-[13px] leading-relaxed text-[#374151] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                                {renderCommentText(c.content)}
-                              </p>
+                        <p className="mt-1 text-xs text-[#737987] max-w-xs">
+                          Drop a quick standup update, QA note, or @mention a
+                          teammate below.
+                        </p>
+                      </div>
+                    ) : (
+                      task.comments.map((c) => (
+                        <div key={c.id} className="flex gap-2.5 min-w-0">
+                          <UserAvatar
+                            name={c.author.name}
+                            avatarUrl={c.author.avatarUrl}
+                            size="sm"
+                            className="mt-0.5 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0 overflow-hidden rounded-lg border border-[#EAECF0] bg-[#F7F8FA]/80 px-3.5 py-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-xs font-semibold text-[#20232B]">
+                                {c.author.name}
+                              </span>
+                              <span className="shrink-0 text-[11px] text-[#9CA3AF]">
+                                {formatRelativeTime(c.createdAt)}
+                              </span>
                             </div>
+                            <p className="mt-1 text-[13px] leading-relaxed text-[#374151] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                              {renderCommentText(c.content)}
+                            </p>
                           </div>
-                        ))
-                      )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Sticky Agile Comment Composer */}
+                  <div className="border-t border-[#EAECF0] bg-white px-6 py-3.5 shrink-0 space-y-2.5">
+                    {/* 1-Click Agile Quick Updates */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[
+                        "Started working on this",
+                        "Ready for QA review",
+                        "Found a bug — needs fix",
+                        "Blocked — need help",
+                      ].map((snippet) => (
+                        <button
+                          key={snippet}
+                          type="button"
+                          onClick={() =>
+                            setCommentText((prev) =>
+                              prev ? `${prev} ${snippet}` : snippet
+                            )
+                          }
+                          className="rounded-full border border-[#E2E6EE] bg-[#F7F8FA] px-2.5 py-0.5 text-[11px] font-medium text-[#525866] hover:border-[#635BDB]/50 hover:bg-[#F0EFFF] hover:text-[#5148C9] transition-colors"
+                        >
+                          + {snippet}
+                        </button>
+                      ))}
                     </div>
 
-                    {/* Comment Composer */}
                     <form onSubmit={handleAddComment} className="space-y-2">
                       <div className="relative">
                         <Textarea
                           rows={2}
                           value={commentText}
                           onChange={(e) => setCommentText(e.target.value)}
-                          placeholder="Write an update or @mention a colleague..."
+                          onKeyDown={(e) => {
+                            if (
+                              (e.metaKey || e.ctrlKey) &&
+                              e.key === "Enter" &&
+                              commentText.trim() &&
+                              !postingComment
+                            ) {
+                              e.preventDefault();
+                              handleAddComment(e);
+                            }
+                          }}
+                          placeholder="Write an update or @mention a colleague... (Ctrl+Enter to post)"
                         />
                         {showMentionList && (
                           <div className="absolute bottom-full left-0 mb-1 z-20 w-56 rounded-md border border-[#EAECF0] bg-white p-1 shadow-lg max-h-40 overflow-y-auto">
@@ -1619,44 +1695,9 @@ export function TaskDetailDrawer({
                         </Button>
                       </div>
                     </form>
-                  </TabsContent>
-
-                  <TabsContent value="activity">
-                    <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white">
-                      {task.activityLogs.length === 0 ? (
-                        <p className="py-6 text-center text-xs text-[#737987]">
-                          No activity recorded yet.
-                        </p>
-                      ) : (
-                        task.activityLogs.map((log) => (
-                          <div
-                            key={log.id}
-                            className="flex items-start gap-2.5 px-3.5 py-2.5 text-xs"
-                          >
-                            <UserAvatar
-                              name={log.actor.name}
-                              avatarUrl={log.actor.avatarUrl}
-                              size="xs"
-                              className="mt-0.5"
-                            />
-                            <div className="flex-1 min-w-0 break-words [overflow-wrap:anywhere]">
-                              <span className="font-medium text-[#20232B]">
-                                {log.actor.name}
-                              </span>{" "}
-                              <span className="text-[#525866]">
-                                {log.description}
-                              </span>
-                              <p className="text-[10.5px] text-[#9CA3AF] mt-0.5">
-                                {formatRelativeTime(log.createdAt)}
-                              </p>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </SheetContent>
