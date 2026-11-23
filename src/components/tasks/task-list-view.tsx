@@ -349,7 +349,11 @@ export function TaskListView({
                                 onClick={() =>
                                   handleStatusChange(
                                     sub.id,
-                                    subDone ? "TODO" : "DONE",
+                                    sub.status === "TODO"
+                                      ? "IN_PROGRESS"
+                                      : subDone
+                                      ? "TODO"
+                                      : "DONE",
                                     true,
                                     task.id
                                   )

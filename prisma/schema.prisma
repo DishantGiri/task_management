@@ -84,18 +84,18 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  department           Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  managedProjects      Project[]       @relation("ProjectManager")
-  projectMemberships   ProjectMember[]
-  assignedTasks        Task[]          @relation("TaskPrimaryAssignee")
-  createdTasks         Task[]          @relation("TaskCreator")
-  taskCollaborations   TaskAssignee[]
-  comments             Comment[]
-  attachments          Attachment[]
-  notifications        Notification[]  @relation("NotificationRecipient")
-  triggeredNotifications Notification[] @relation("NotificationActor")
-  activityLogs         ActivityLog[]
-  personalTasks        PersonalTask[]
+  department             Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  managedProjects        Project[]       @relation("ProjectManager")
+  projectMemberships     ProjectMember[]
+  assignedTasks          Task[]          @relation("TaskPrimaryAssignee")
+  createdTasks           Task[]          @relation("TaskCreator")
+  taskCollaborations     TaskAssignee[]
+  comments               Comment[]
+  attachments            Attachment[]
+  notifications          Notification[]  @relation("NotificationRecipient")
+  triggeredNotifications Notification[]  @relation("NotificationActor")
+  activityLogs           ActivityLog[]
+  personalTasks          PersonalTask[]
 
   @@index([departmentId])
   @@index([role, status])
@@ -305,10 +305,10 @@ model ActivityLog {
 }
 
 model Tag {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  color     String    @default("#635BDB")
-  createdAt DateTime  @default(now())
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#635BDB")
+  createdAt DateTime @default(now())
 
   tasks TaskTag[]
 }

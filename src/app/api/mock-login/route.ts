@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
     await invalidateWorkspaceCache().catch(() => {});
 
     const maxAge = 7 * 24 * 60 * 60;
+    // Never store avatarUrl (especially base64 data URLs) in the JWT cookie,
+    // or Set-Cookie exceeds Nginx's proxy_buffer_size and triggers 502 Bad Gateway.
     const jwtToken = await encode({
       token: {
         sub: dbUser.id,
@@ -84,7 +86,6 @@ export async function POST(request: NextRequest) {
         role: dbUser.role,
         status: dbUser.status,
         designation: dbUser.designation,
-        avatarUrl: dbUser.avatarUrl,
         departmentId: dbUser.departmentId,
       },
       secret: AUTH_SECRET_KEY,

@@ -2,6 +2,7 @@ import { cache } from "react";
 import { auth } from "@/lib/auth";
 import { SUPER_ADMIN_EMAIL } from "@/lib/auth/auth.config";
 import { prisma } from "@/lib/prisma";
+import { isQaOrTester } from "@/lib/utils";
 import type {
   NotificationType,
   Role,
@@ -18,6 +19,7 @@ export interface SessionUser {
   designation: string | null;
   avatarUrl: string | null;
   departmentId: string | null;
+  departmentName: string | null;
 }
 
 export const getAuthenticatedUser = cache(
@@ -28,6 +30,18 @@ export const getAuthenticatedUser = cache(
 
     if (!sessionId && !sessionEmail) return null;
 
+    const userSelect = {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      status: true,
+      designation: true,
+      avatarUrl: true,
+      departmentId: true,
+      department: { select: { name: true } },
+    } as const;
+
     let dbUser = await prisma.user.findFirst({
       where: sessionId
         ? {
@@ -37,16 +51,7 @@ export const getAuthenticatedUser = cache(
             ],
           }
         : { email: sessionEmail },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        designation: true,
-        avatarUrl: true,
-        departmentId: true,
-      },
+      select: userSelect,
     });
 
     if (!dbUser && sessionEmail) {
@@ -63,16 +68,7 @@ export const getAuthenticatedUser = cache(
             ? "Company Administrator"
             : "Awaiting Admin Approval",
         },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          status: true,
-          designation: true,
-          avatarUrl: true,
-          departmentId: true,
-        },
+        select: userSelect,
       });
     }
 
@@ -85,20 +81,21 @@ export const getAuthenticatedUser = cache(
       dbUser = await prisma.user.update({
         where: { id: dbUser.id },
         data: { role: "ADMIN", status: "ACTIVE" },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          status: true,
-          designation: true,
-          avatarUrl: true,
-          departmentId: true,
-        },
+        select: userSelect,
       });
     }
 
-    return dbUser;
+    return {
+      id: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      role: dbUser.role,
+      status: dbUser.status,
+      designation: dbUser.designation,
+      avatarUrl: dbUser.avatarUrl,
+      departmentId: dbUser.departmentId,
+      departmentName: dbUser.department?.name ?? null,
+    };
   }
 );
 
@@ -253,8 +250,12 @@ export async function canEditTask(
     task.parent?.assigneeId === user.id ||
     task.parent?.collaborators.some((c) => c.userId === user.id);
 
+  const isProjectQa =
+    isQaOrTester(user.designation, user.departmentName) &&
+    task.project.members.length > 0;
+
   return {
-    allowed: !!isAssigneeOrCollaborator,
+    allowed: !!isAssigneeOrCollaborator || isProjectQa,
     fullEdit: task.parentId !== null && !!isAssigneeOrCollaborator,
   };
 }

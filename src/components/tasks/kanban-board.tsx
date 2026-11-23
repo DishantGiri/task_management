@@ -42,6 +42,7 @@ import {
   getDisplayTaskProgress,
   isTaskOverdue,
   STATUS_CONFIG,
+  validateTaskStatusTransition,
 } from "@/lib/utils";
 import { PriorityBadge } from "@/components/shared/badges";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -50,7 +51,7 @@ import { Progress } from "@/components/ui/progress";
 const COLUMNS: { id: TaskStatus; label: string; dot: string }[] = [
   { id: "TODO", label: "To Do", dot: "bg-slate-400" },
   { id: "IN_PROGRESS", label: "In Progress", dot: "bg-blue-500" },
-  { id: "IN_REVIEW", label: "In Review", dot: "bg-amber-500" },
+  { id: "IN_REVIEW", label: "In Review / QA", dot: "bg-amber-500" },
   { id: "DONE", label: "Done", dot: "bg-emerald-500" },
 ];
 
@@ -405,6 +406,25 @@ export function KanbanBoard({
 
     if (startStatus === targetStatus && draggedId === overId) {
       return;
+    }
+
+    if (startStatus && startStatus !== targetStatus) {
+      const incompleteSubtasks = currentTask.subtasks.filter(
+        (s) => s.status !== "DONE"
+      ).length;
+      const transitionError = validateTaskStatusTransition({
+        currentStatus: startStatus,
+        nextStatus: targetStatus,
+        isSubtask: Boolean(currentTask.parentId),
+        totalSubtasks: currentTask.subtasks.length,
+        incompleteSubtasks,
+        canMarkComplete: true, // Server action also enforces QA/Manager/Admin role check
+      });
+      if (transitionError) {
+        onTasksChange(snapshotRef.current);
+        toast.error(transitionError);
+        return;
+      }
     }
 
     const res = await moveTaskKanbanAction(

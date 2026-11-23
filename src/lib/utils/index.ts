@@ -99,6 +99,95 @@ export function getDisplayTaskProgress(task: {
   );
 }
 
+const QA_PATTERN = /\b(qa|q\.a\.|tester|testing|quality\s*assurance|quality)\b/i;
+
+export function isQaOrTester(
+  designation?: string | null,
+  departmentName?: string | null
+): boolean {
+  return (
+    (Boolean(designation) && QA_PATTERN.test(designation!)) ||
+    (Boolean(departmentName) && QA_PATTERN.test(departmentName!))
+  );
+}
+
+export function canUserMarkTaskComplete(user: {
+  role: string;
+  designation?: string | null;
+  departmentName?: string | null;
+}): boolean {
+  if (user.role === "ADMIN" || user.role === "MANAGER") return true;
+  return isQaOrTester(user.designation, user.departmentName);
+}
+
+export function validateTaskStatusTransition(params: {
+  currentStatus: string;
+  nextStatus: string;
+  isSubtask: boolean;
+  totalSubtasks: number;
+  incompleteSubtasks: number;
+  canMarkComplete: boolean;
+}): string | null {
+  const {
+    currentStatus,
+    nextStatus,
+    isSubtask,
+    totalSubtasks,
+    incompleteSubtasks,
+    canMarkComplete,
+  } = params;
+
+  if (currentStatus === nextStatus) return null;
+
+  // 1. Cannot jump directly from To Do to Done without starting work first
+  if (currentStatus === "TODO" && nextStatus === "DONE") {
+    return isSubtask
+      ? "Start this subtask (move to In Progress) before marking it Done."
+      : "Start this task (move to In Progress) before marking it Done.";
+  }
+
+  // 2. Main task must be started (In Progress) before moving to In Review / QA
+  if (!isSubtask && currentStatus === "TODO" && nextStatus === "IN_REVIEW") {
+    return "Start this task (move to In Progress) before moving it to In Review / QA.";
+  }
+
+  // 3. Main task cannot skip In Review / QA straight from In Progress to Done
+  if (!isSubtask && currentStatus === "IN_PROGRESS" && nextStatus === "DONE") {
+    return "Move this task to In Review / QA for verification before marking it Done.";
+  }
+
+  // 4. Main task cannot move to In Review / QA or Done while subtasks remain incomplete
+  if (
+    !isSubtask &&
+    totalSubtasks > 0 &&
+    incompleteSubtasks > 0 &&
+    (nextStatus === "IN_REVIEW" || nextStatus === "DONE")
+  ) {
+    return `Complete all subtasks (${
+      totalSubtasks - incompleteSubtasks
+    }/${totalSubtasks} done) before moving this task to ${
+      nextStatus === "IN_REVIEW" ? "In Review / QA" : "Done"
+    }.`;
+  }
+
+  // 5. Only QA/Tester, Project Manager, or Admin can mark a main task Done
+  if (!isSubtask && nextStatus === "DONE" && !canMarkComplete) {
+    return "Only QA / Testers, Project Managers, or Admins can mark a task complete. Move it to In Review / QA for verification.";
+  }
+
+  // 6. Only QA/Tester, Project Manager, or Admin can kick a task back from In Review / QA
+  if (
+    !isSubtask &&
+    currentStatus === "IN_REVIEW" &&
+    (nextStatus === "IN_PROGRESS" || nextStatus === "TODO") &&
+    !canMarkComplete
+  ) {
+    return "Only QA / Testers, Project Managers, or Admins can return a task from In Review / QA to In Progress.";
+  }
+
+  return null;
+}
+
 export const STATUS_CONFIG = {
   TODO: {
     label: "To Do",
@@ -113,7 +202,7 @@ export const STATUS_CONFIG = {
     dot: "bg-blue-500",
   },
   IN_REVIEW: {
-    label: "In Review",
+    label: "In Review / QA",
     color: "#F59E0B",
     bg: "bg-amber-50 text-amber-700 border-amber-200/80",
     dot: "bg-amber-500",

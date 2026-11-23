@@ -57,22 +57,20 @@ export const authConfig: NextAuthConfig = {
         }
         token.designation =
           (user as { designation?: string | null }).designation ?? null;
-        token.avatarUrl =
-          (user as { avatarUrl?: string | null }).avatarUrl ??
-          user.image ??
-          null;
+        // Keep JWT cookie small for Nginx reverse proxies; live avatarUrl is loaded from MySQL.
+        token.avatarUrl = null;
+        delete token.picture;
         token.departmentId =
           (user as { departmentId?: string | null }).departmentId ?? null;
       }
       if (trigger === "update" && session) {
         if (session.name) token.name = session.name;
-        if (session.avatarUrl !== undefined)
-          token.avatarUrl = session.avatarUrl;
         if (session.designation !== undefined)
           token.designation = session.designation;
         if (session.role !== undefined) token.role = session.role;
         if (session.status !== undefined) token.status = session.status;
       }
+      delete token.picture;
       return token;
     },
     session({ session, token }) {

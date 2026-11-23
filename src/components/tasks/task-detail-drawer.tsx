@@ -38,12 +38,14 @@ import {
   updateTaskAction,
 } from "@/actions/tasks";
 import {
+  canUserMarkTaskComplete,
   cn,
   formatCompactDate,
   formatFileSize,
   formatRelativeTime,
   getDisplayTaskProgress,
   isTaskOverdue,
+  validateTaskStatusTransition,
 } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -165,6 +167,16 @@ export function TaskDetailDrawer({
   // Delete dialog
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const needsBoardRefreshRef = useRef(false);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && needsBoardRefreshRef.current) {
+      needsBoardRefreshRef.current = false;
+      onUpdated?.();
+      router.refresh();
+    }
+    onOpenChange(nextOpen);
+  };
 
   const syncDraftFromTask = useCallback((data: TaskDetailData) => {
     setTitle(data.title);
@@ -179,27 +191,40 @@ export function TaskDetailDrawer({
     setDraftDependencyIds(data.dependencies.map((d) => d.dependsOnId));
   }, []);
 
-  const loadTask = useCallback(async (id: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/tasks/${id}`, { cache: "no-store" });
-      if (!res.ok) {
-        toast.error("Could not load task details");
-        setTask(null);
-        return;
+  const loadTask = useCallback(
+    async (
+      id: string,
+      options?: { silent?: boolean; preserveDraft?: boolean }
+    ) => {
+      if (!options?.silent) {
+        setLoading(true);
       }
-      const json = await res.json();
-      setTask(json.data);
-      syncDraftFromTask(json.data);
-    } catch {
-      toast.error("Failed to fetch task details");
-    } finally {
-      setLoading(false);
-    }
-  }, [syncDraftFromTask]);
+      try {
+        const res = await fetch(`/api/tasks/${id}`, { cache: "no-store" });
+        if (!res.ok) {
+          toast.error("Could not load task details");
+          if (!options?.silent) setTask(null);
+          return;
+        }
+        const json = await res.json();
+        setTask(json.data);
+        if (!options?.preserveDraft) {
+          syncDraftFromTask(json.data);
+        }
+      } catch {
+        toast.error("Failed to fetch task details");
+      } finally {
+        if (!options?.silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [syncDraftFromTask]
+  );
 
   useEffect(() => {
     if (open && taskId) {
+      needsBoardRefreshRef.current = false;
       loadTask(taskId);
       setEditingDesc(false);
       setShowSubtaskForm(false);
@@ -213,8 +238,16 @@ export function TaskDetailDrawer({
       (task?.assigneeId === currentUserId ||
         task?.creatorId === currentUserId));
 
+  const currentUserSummary = users.find((u) => u.id === currentUserId);
+  const canMarkComplete = canUserMarkTaskComplete({
+    role: currentUserRole,
+    designation: currentUserSummary?.designation,
+    departmentName: currentUserSummary?.department?.name,
+  });
+
   const canUpdateStatus =
     canFullEdit ||
+    canMarkComplete ||
     task?.assigneeId === currentUserId ||
     task?.collaborators.some((c) => c.user.id === currentUserId);
 
@@ -264,6 +297,21 @@ export function TaskDetailDrawer({
     const patch: Record<string, unknown> = {};
 
     if (draftStatus !== task.status) {
+      const incompleteSubtasks = task.subtasks.filter(
+        (s) => s.status !== "DONE"
+      ).length;
+      const transitionError = validateTaskStatusTransition({
+        currentStatus: task.status,
+        nextStatus: draftStatus,
+        isSubtask: Boolean(task.parentId),
+        totalSubtasks: task.subtasks.length,
+        incompleteSubtasks,
+        canMarkComplete,
+      });
+      if (transitionError) {
+        toast.error(transitionError);
+        return;
+      }
       patch.status = draftStatus;
     }
 
@@ -327,38 +375,58 @@ export function TaskDetailDrawer({
     }
     setEditingDesc(false);
     toast.success("Changes saved");
-    await loadTask(task.id);
-    onUpdated?.();
-    router.refresh();
+    await loadTask(task.id, { silent: true });
+    needsBoardRefreshRef.current = true;
   };
 
   const handleSubtaskStatusToggle = async (
     subtaskId: string,
     currentStatus: TaskStatus
   ) => {
-    const nextStatus: TaskStatus = currentStatus === "DONE" ? "TODO" : "DONE";
+    const nextStatus: TaskStatus =
+      currentStatus === "TODO"
+        ? "IN_PROGRESS"
+        : currentStatus === "DONE"
+        ? "TODO"
+        : "DONE";
     const res = await updateTaskAction({ id: subtaskId, status: nextStatus });
     if (res.error) {
       toast.error(res.error);
       return;
     }
-    if (task) await loadTask(task.id);
-    onUpdated?.();
-    router.refresh();
+    if (currentStatus === "TODO") {
+      toast.success("Subtask started (In Progress)");
+    }
+    if (task) await loadTask(task.id, { silent: true, preserveDraft: true });
+    needsBoardRefreshRef.current = true;
   };
 
   const handleSubtaskStatusChange = async (
     subtaskId: string,
     nextStatus: TaskStatus
   ) => {
+    const sub = task?.subtasks.find((s) => s.id === subtaskId);
+    if (sub) {
+      const transitionError = validateTaskStatusTransition({
+        currentStatus: sub.status,
+        nextStatus,
+        isSubtask: true,
+        totalSubtasks: 0,
+        incompleteSubtasks: 0,
+        canMarkComplete: true,
+      });
+      if (transitionError) {
+        toast.error(transitionError);
+        return;
+      }
+    }
     const res = await updateTaskAction({ id: subtaskId, status: nextStatus });
     if (res.error) {
       toast.error(res.error);
       return;
     }
-    if (task) await loadTask(task.id);
-    onUpdated?.();
-    router.refresh();
+    if (task) await loadTask(task.id, { silent: true, preserveDraft: true });
+    needsBoardRefreshRef.current = true;
   };
 
   const handleAddSubtask = async (e: React.FormEvent) => {
@@ -397,9 +465,8 @@ export function TaskDetailDrawer({
     setSubPriority("MEDIUM");
     setSubDueDate("");
     setShowSubtaskForm(false);
-    await loadTask(task.id);
-    onUpdated?.();
-    router.refresh();
+    await loadTask(task.id, { silent: true, preserveDraft: true });
+    needsBoardRefreshRef.current = true;
   };
 
   const handleDeleteSubtask = async (subId: string) => {
@@ -409,9 +476,8 @@ export function TaskDetailDrawer({
       return;
     }
     toast.success("Subtask removed");
-    if (task) await loadTask(task.id);
-    onUpdated?.();
-    router.refresh();
+    if (task) await loadTask(task.id, { silent: true, preserveDraft: true });
+    needsBoardRefreshRef.current = true;
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
@@ -429,8 +495,8 @@ export function TaskDetailDrawer({
     }
     setCommentText("");
     setShowMentionList(false);
-    await loadTask(task.id);
-    onUpdated?.();
+    await loadTask(task.id, { silent: true, preserveDraft: true });
+    needsBoardRefreshRef.current = true;
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -452,8 +518,19 @@ export function TaskDetailDrawer({
         return;
       }
       toast.success(`Uploaded ${file.name}`);
-      await loadTask(task.id);
-      onUpdated?.();
+      if (json.data) {
+        setTask((prev) =>
+          prev
+            ? {
+                ...prev,
+                attachments: [json.data, ...prev.attachments],
+              }
+            : prev
+        );
+      } else {
+        await loadTask(task.id, { silent: true, preserveDraft: true });
+      }
+      needsBoardRefreshRef.current = true;
     } catch {
       toast.error("File upload failed");
     } finally {
@@ -469,7 +546,15 @@ export function TaskDetailDrawer({
       return;
     }
     toast.success("Attachment deleted");
-    if (task) await loadTask(task.id);
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            attachments: prev.attachments.filter((a) => a.id !== attId),
+          }
+        : prev
+    );
+    needsBoardRefreshRef.current = true;
   };
 
   const handleDeleteTask = async () => {
@@ -564,7 +649,7 @@ export function TaskDetailDrawer({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent side="right" className="p-0 flex flex-col" hideClose>
           <SheetTitle className="sr-only">Task Details</SheetTitle>
 
@@ -612,7 +697,7 @@ export function TaskDetailDrawer({
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => onOpenChange(false)}
+                    onClick={() => handleOpenChange(false)}
                     aria-label="Close drawer"
                   >
                     <X className="h-4 w-4" />
@@ -702,7 +787,7 @@ export function TaskDetailDrawer({
                       <SelectContent>
                         <SelectItem value="TODO">To Do</SelectItem>
                         <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                        <SelectItem value="IN_REVIEW">In Review</SelectItem>
+                        <SelectItem value="IN_REVIEW">In Review / QA</SelectItem>
                         <SelectItem value="DONE">Done</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1191,7 +1276,11 @@ export function TaskDetailDrawer({
                                 }
                                 className="shrink-0 text-[#737987] hover:text-[#635BDB]"
                                 title={
-                                  isDone ? "Mark as To Do" : "Mark as Done"
+                                  isDone
+                                    ? "Reopen as To Do"
+                                    : sub.status === "TODO"
+                                    ? "Start subtask (In Progress)"
+                                    : "Mark as Done"
                                 }
                               >
                                 {isDone ? (

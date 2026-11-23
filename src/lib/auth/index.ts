@@ -262,17 +262,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = dbUser.role;
           token.status = dbUser.status;
           token.designation = dbUser.designation;
-          token.avatarUrl = dbUser.avatarUrl;
+          // Keep JWT cookie small for Nginx; live avatarUrl is fetched from DB via getCurrentUser()
+          token.avatarUrl = null;
           token.departmentId = dbUser.departmentId;
         }
       }
       if (trigger === "update" && session) {
         if (session.name) token.name = session.name;
-        if (session.avatarUrl !== undefined)
-          token.avatarUrl = session.avatarUrl;
         if (session.designation !== undefined)
           token.designation = session.designation;
       }
+      delete token.picture;
       return token;
     },
   },

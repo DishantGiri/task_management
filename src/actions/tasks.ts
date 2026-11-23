@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { unlink } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import {
+  canUserMarkTaskComplete,
+  validateTaskStatusTransition,
+} from "@/lib/utils";
 import { invalidateWorkspaceCache } from "@/lib/cache/redis";
 import {
   canCreateTaskInProject,
@@ -244,7 +248,10 @@ export async function updateTaskAction(values: unknown) {
 
     const existing = await prisma.task.findUnique({
       where: { id: data.id },
-      include: { _count: { select: { subtasks: true } } },
+      include: {
+        _count: { select: { subtasks: true } },
+        subtasks: { select: { status: true } },
+      },
     });
     if (!existing) return { error: "Task not found." };
 
@@ -252,6 +259,21 @@ export async function updateTaskAction(values: unknown) {
 
     // Employees without fullEdit can update status (and description/title on their own subtasks)
     if (data.status !== undefined) {
+      const incompleteSubtasks = existing.subtasks.filter(
+        (s) => s.status !== "DONE"
+      ).length;
+      const transitionError = validateTaskStatusTransition({
+        currentStatus: existing.status,
+        nextStatus: data.status,
+        isSubtask: Boolean(existing.parentId),
+        totalSubtasks: existing._count.subtasks,
+        incompleteSubtasks,
+        canMarkComplete: canUserMarkTaskComplete(user),
+      });
+      if (transitionError) {
+        return { error: transitionError };
+      }
+
       updateData.status = data.status;
       updateData.completedAt = data.status === "DONE" ? new Date() : null;
       if (data.status === "DONE") {
