@@ -16,6 +16,7 @@ export default async function TeamPage() {
       include: {
         department: { select: { id: true, name: true } },
         assignedTasks: {
+          where: { parentId: null },
           select: { id: true, status: true, dueDate: true },
         },
         _count: {
