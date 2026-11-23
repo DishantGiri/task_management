@@ -250,7 +250,7 @@ export function ProjectsListClient({
                 </div>
 
                 {/* Description */}
-                <p className="mt-3 text-[12.5px] leading-relaxed text-[#525866] line-clamp-2 min-h-[38px]">
+                <p className="mt-3 text-[12.5px] leading-relaxed text-[#525866] line-clamp-2 min-h-[38px] break-words [overflow-wrap:anywhere]">
                   {project.description || "No project description provided."}
                 </p>
 

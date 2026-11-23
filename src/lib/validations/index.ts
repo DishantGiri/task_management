@@ -40,7 +40,13 @@ export const employeeUpdateSchema = z.object({
   password: z.string().min(8).or(z.literal("")).optional(),
 });
 
-export const projectCreateSchema = z.object({
+function isNotPastDate(val: string | null | undefined): boolean {
+  if (!val) return true;
+  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+  return val.slice(0, 10) >= todayStr;
+}
+
+const projectBaseSchema = z.object({
   name: z.string().min(2, "Project name is required").max(120),
   code: z
     .string()
@@ -53,20 +59,52 @@ export const projectCreateSchema = z.object({
   status: z.enum(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "ARCHIVED"]).default("ACTIVE"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   managerId: z.string().min(1, "Project manager is required"),
-  startDate: z.string().nullable().optional(),
-  endDate: z.string().nullable().optional(),
+  startDate: z
+    .string()
+    .nullable()
+    .optional()
+    .refine(isNotPastDate, {
+      message: "Start date cannot be in the past",
+    }),
+  endDate: z
+    .string()
+    .nullable()
+    .optional()
+    .refine(isNotPastDate, {
+      message: "End date cannot be in the past",
+    }),
   memberIds: z.array(z.string()).default([]),
 });
 
-export const projectUpdateSchema = projectCreateSchema.extend({
-  id: z.string().min(1),
-});
+export const projectCreateSchema = projectBaseSchema.refine(
+  (data) => {
+    if (data.startDate && data.endDate) {
+      return data.endDate.slice(0, 10) >= data.startDate.slice(0, 10);
+    }
+    return true;
+  },
+  {
+    message: "End date cannot be earlier than start date",
+    path: ["endDate"],
+  }
+);
 
-function isNotPastDate(val: string | null | undefined): boolean {
-  if (!val) return true;
-  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
-  return val.slice(0, 10) >= todayStr;
-}
+export const projectUpdateSchema = projectBaseSchema
+  .extend({
+    id: z.string().min(1),
+  })
+  .refine(
+    (data) => {
+      if (data.startDate && data.endDate) {
+        return data.endDate.slice(0, 10) >= data.startDate.slice(0, 10);
+      }
+      return true;
+    },
+    {
+      message: "End date cannot be earlier than start date",
+      path: ["endDate"],
+    }
+  );
 
 export const taskCreateSchema = z
   .object({

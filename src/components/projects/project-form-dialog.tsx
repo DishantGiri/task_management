@@ -182,11 +182,6 @@ export function ProjectFormDialog({
   const managerId = watch("managerId");
   const startDateVal = watch("startDate");
   const todayStr = new Date().toLocaleDateString("en-CA");
-  const minStartDate =
-    editingProject?.startDate &&
-    editingProject.startDate.slice(0, 10) < todayStr
-      ? editingProject.startDate.slice(0, 10)
-      : todayStr;
   const minEndDate =
     startDateVal && startDateVal > todayStr ? startDateVal : todayStr;
 
@@ -366,9 +361,14 @@ export function ProjectFormDialog({
               <Input
                 id="proj-start"
                 type="date"
-                min={minStartDate}
+                min={todayStr}
                 {...register("startDate")}
               />
+              {errors.startDate && (
+                <p className="text-[11px] text-red-600">
+                  {errors.startDate.message}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="proj-end">Target End Date</Label>
@@ -378,6 +378,11 @@ export function ProjectFormDialog({
                 min={minEndDate}
                 {...register("endDate")}
               />
+              {errors.endDate && (
+                <p className="text-[11px] text-red-600">
+                  {errors.endDate.message}
+                </p>
+              )}
             </div>
           </div>
 

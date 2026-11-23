@@ -223,18 +223,18 @@ export function ProjectWorkspaceClient({
       </Link>
 
       {/* Project Header Card */}
-      <div className="rounded-lg border border-[#EAECF0] bg-white p-5 shadow-subtle">
+      <div className="rounded-lg border border-[#EAECF0] bg-white p-5 shadow-subtle overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div className="flex items-start gap-3.5 min-w-0">
+          <div className="flex items-start gap-3.5 min-w-0 flex-1">
             <div
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white"
               style={{ backgroundColor: project.color }}
             >
               {project.code.slice(0, 3)}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[22px] font-semibold tracking-tight text-[#20232B]">
+                <h1 className="text-[22px] font-semibold tracking-tight text-[#20232B] break-words">
                   {project.name}
                 </h1>
                 <span className="font-mono text-xs text-[#9CA3AF]">
@@ -244,7 +244,7 @@ export function ProjectWorkspaceClient({
                 <PriorityBadge priority={project.priority} />
               </div>
               {project.description && (
-                <p className="mt-1.5 max-w-3xl text-[13px] text-[#525866] leading-relaxed">
+                <p className="mt-1.5 max-w-3xl text-[13px] text-[#525866] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {project.description}
                 </p>
               )}
