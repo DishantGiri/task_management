@@ -9,6 +9,7 @@ import {
   Building2,
   Calendar,
   Check,
+  Flag,
   ListTodo,
   Loader2,
   Pencil,
@@ -20,6 +21,7 @@ import {
 import { toast } from "sonner";
 import type { ProjectMemberRole, Role } from "@prisma/client";
 import type {
+  MilestoneItem,
   ProjectListItem,
   TagSummary,
   TaskListItem,
@@ -49,6 +51,7 @@ import {
 } from "@/components/shared/badges";
 import { TasksWorkspace } from "@/components/tasks/tasks-workspace";
 import { ProjectFormDialog } from "@/components/projects/project-form-dialog";
+import { ProjectMilestonesTab } from "@/components/projects/project-milestones-tab";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ProjectActivityItem {
@@ -61,6 +64,7 @@ interface ProjectActivityItem {
 export function ProjectWorkspaceClient({
   project,
   tasks,
+  milestones = [],
   allUsers,
   departments = [],
   tags,
@@ -71,6 +75,7 @@ export function ProjectWorkspaceClient({
 }: {
   project: ProjectListItem;
   tasks: TaskListItem[];
+  milestones?: MilestoneItem[];
   allUsers: UserSummary[];
   departments?: { id: string; name: string }[];
   tags: TagSummary[];
@@ -307,6 +312,10 @@ export function ProjectWorkspaceClient({
             <ListTodo className="h-3.5 w-3.5" />
             Tasks ({tasks.length})
           </TabsTrigger>
+          <TabsTrigger value="milestones" className="gap-1.5">
+            <Flag className="h-3.5 w-3.5" />
+            Milestones ({milestones.length})
+          </TabsTrigger>
           <TabsTrigger value="members" className="gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Members ({project.members.length})
@@ -341,6 +350,15 @@ export function ProjectWorkspaceClient({
               defaultView="kanban"
             />
           </Suspense>
+        </TabsContent>
+
+        <TabsContent value="milestones">
+          <ProjectMilestonesTab
+            projectId={project.id}
+            milestones={milestones}
+            projectTasks={tasks}
+            canManage={canManage}
+          />
         </TabsContent>
 
         <TabsContent value="members">

@@ -253,3 +253,36 @@ export const personalTaskUpdateSchema = z.object({
   checklist: z.array(personalChecklistItemSchema).optional(),
 });
 
+
+export const milestoneCreateSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(2, "Milestone title must be at least 2 characters")
+    .max(200, "Milestone title must be 200 characters or fewer"),
+  description: z.string().max(3000).nullable().optional(),
+  projectId: z.string().min(1, "Project is required"),
+  status: z.enum(["UPCOMING", "IN_PROGRESS", "COMPLETED"]).default("UPCOMING"),
+  dueDate: z
+    .string()
+    .nullable()
+    .optional()
+    .refine(isNotPastDate, {
+      message: "Target date cannot be in the past",
+    }),
+  taskIds: z.array(z.string()).default([]),
+});
+
+export const milestoneUpdateSchema = z.object({
+  id: z.string().min(1),
+  title: z
+    .string()
+    .trim()
+    .min(2, "Milestone title must be at least 2 characters")
+    .max(200, "Milestone title must be 200 characters or fewer")
+    .optional(),
+  description: z.string().max(3000).nullable().optional(),
+  status: z.enum(["UPCOMING", "IN_PROGRESS", "COMPLETED"]).optional(),
+  dueDate: z.string().nullable().optional(),
+  taskIds: z.array(z.string()).optional(),
+});

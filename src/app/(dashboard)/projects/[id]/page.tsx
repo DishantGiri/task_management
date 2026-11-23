@@ -24,47 +24,95 @@ export default async function ProjectDetailPage({
   const hasAccess = await canAccessProject(user, id);
   if (!hasAccess) notFound();
 
-  const [projects, tasks, ref, canManage, activities] = await Promise.all([
-    getProjectsList(user),
-    getTasksList(user, { projectId: id }),
-    getWorkspaceReferenceData(user),
-    canManageProject(user, id),
-    user.role === "EMPLOYEE"
-      ? Promise.resolve([])
-      : prisma.activityLog.findMany({
-          where:
-            user.role === "ADMIN"
-              ? { projectId: id }
-              : {
-                  projectId: id,
-                  entityType: "TASK",
-                  action: {
-                    in: [
-                      "TASK_CREATED",
-                      "STATUS_CHANGED",
-                      "ASSIGNEE_CHANGED",
-                      "SUBTASK_ADDED",
-                      "COMMENT_ADDED",
-                      "ATTACHMENT_UPLOADED",
-                    ],
+  const [projects, tasks, ref, canManage, activities, rawMilestones] =
+    await Promise.all([
+      getProjectsList(user),
+      getTasksList(user, { projectId: id }),
+      getWorkspaceReferenceData(user),
+      canManageProject(user, id),
+      user.role === "EMPLOYEE"
+        ? Promise.resolve([])
+        : prisma.activityLog.findMany({
+            where:
+              user.role === "ADMIN"
+                ? { projectId: id }
+                : {
+                    projectId: id,
+                    entityType: "TASK",
+                    action: {
+                      in: [
+                        "TASK_CREATED",
+                        "STATUS_CHANGED",
+                        "ASSIGNEE_CHANGED",
+                        "SUBTASK_ADDED",
+                        "COMMENT_ADDED",
+                        "ATTACHMENT_UPLOADED",
+                      ],
+                    },
+                    actor: { role: { not: "ADMIN" } },
                   },
-                  actor: { role: { not: "ADMIN" } },
-                },
-          orderBy: { createdAt: "desc" },
-          take: 30,
-          include: {
-            actor: { select: { id: true, name: true, avatarUrl: true } },
+            orderBy: { createdAt: "desc" },
+            take: 30,
+            include: {
+              actor: { select: { id: true, name: true, avatarUrl: true } },
+            },
+          }),
+      prisma.milestone.findMany({
+        where: { projectId: id },
+        orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+        include: {
+          createdBy: { select: { id: true, name: true, avatarUrl: true } },
+          tasks: {
+            where: { parentId: null },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              taskKey: true,
+              title: true,
+              status: true,
+              priority: true,
+              dueDate: true,
+              assignee: { select: { id: true, name: true, avatarUrl: true } },
+            },
           },
-        }),
-  ]);
+        },
+      }),
+    ]);
 
   const project = projects.find((p) => p.id === id);
   if (!project) notFound();
+
+  const milestones = rawMilestones.map((m) => {
+    const total = m.tasks.length;
+    const completed = m.tasks.filter((t) => t.status === "DONE").length;
+    const progress =
+      m.status === "COMPLETED"
+        ? 100
+        : total > 0
+        ? Math.round((completed / total) * 100)
+        : 0;
+    return {
+      id: m.id,
+      title: m.title,
+      description: m.description,
+      status: m.status,
+      dueDate: m.dueDate?.toISOString() ?? null,
+      projectId: m.projectId,
+      createdAt: m.createdAt.toISOString(),
+      createdBy: m.createdBy,
+      tasks: m.tasks.map((t) => ({
+        ...t,
+        dueDate: t.dueDate?.toISOString() ?? null,
+      })),
+      taskStats: { total, completed, progress },
+    };
+  });
 
   return (
     <ProjectWorkspaceClient
       project={project}
       tasks={tasks}
+      milestones={milestones}
       allUsers={ref.users}
       departments={ref.departments}
       tags={ref.tags}

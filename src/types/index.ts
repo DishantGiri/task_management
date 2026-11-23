@@ -195,3 +195,28 @@ export interface PersonalTaskItem {
   updatedAt: string;
 }
 
+
+export interface MilestoneItem {
+  id: string;
+  title: string;
+  description: string | null;
+  status: "UPCOMING" | "IN_PROGRESS" | "COMPLETED";
+  dueDate: string | null;
+  projectId: string;
+  createdAt: string;
+  createdBy: { id: string; name: string; avatarUrl: string | null };
+  tasks: {
+    id: string;
+    taskKey: string;
+    title: string;
+    status: TaskStatus;
+    priority: Priority;
+    dueDate: string | null;
+    assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  }[];
+  taskStats: {
+    total: number;
+    completed: number;
+    progress: number;
+  };
+}
