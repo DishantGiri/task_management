@@ -33,6 +33,31 @@ const userSelect = {
   department: { select: { id: true, name: true } },
 };
 
+function formatTaskActionError(err: unknown, fallback: string): string {
+  const code =
+    typeof err === "object" && err !== null && "code" in err
+      ? String((err as { code?: unknown }).code)
+      : "";
+  const raw = err instanceof Error ? err.message : "";
+
+  if (code === "P2000" || raw.includes("too long for the column")) {
+    if (raw.toLowerCase().includes("title")) {
+      return "Title is too long. Please keep it within 200 characters.";
+    }
+    return "One of the fields is too long. Please shorten your input and try again.";
+  }
+  if (code === "P2002") {
+    return "A duplicate record already exists. Please try again.";
+  }
+  if (code === "P2025") {
+    return "The requested task could not be found.";
+  }
+  if (raw.includes("Invalid `prisma.") || raw.includes("PrismaClient")) {
+    return fallback;
+  }
+  return raw || fallback;
+}
+
 export async function createTaskAction(values: unknown) {
   try {
     const user = await requireAuth();
@@ -199,8 +224,7 @@ export async function createTaskAction(values: unknown) {
       task: serializedTask,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to create task";
-    return { error: message };
+    return { error: formatTaskActionError(err, "Failed to create task. Please try again.") };
   }
 }
 
@@ -380,8 +404,7 @@ export async function updateTaskAction(values: unknown) {
     revalidatePath(`/projects/${updated.projectId}`);
     return { success: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to update task";
-    return { error: message };
+    return { error: formatTaskActionError(err, "Failed to update task. Please try again.") };
   }
 }
 

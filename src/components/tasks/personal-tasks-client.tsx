@@ -63,6 +63,7 @@ import {
 } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -697,12 +698,12 @@ export function PersonalTasksClient({
               </SelectContent>
             </Select>
 
-            <Input
-              type="date"
-              min={new Date().toLocaleDateString("en-CA")}
+            <DatePicker
+              minDate={new Date().toLocaleDateString("en-CA")}
               value={quickDueDate}
-              onChange={(e) => setQuickDueDate(e.target.value)}
-              className="h-9 w-[142px] text-xs"
+              placeholder="Due date"
+              onChange={setQuickDueDate}
+              className="h-9 w-[150px] text-xs"
             />
 
             <button
@@ -1358,19 +1359,21 @@ export function PersonalTasksClient({
                     <span className="inline-flex items-center gap-1 text-xs text-[#737987]">
                       <Calendar className="h-3.5 w-3.5" /> Due Date
                     </span>
-                    <Input
-                      type="date"
+                    <DatePicker
+                      minDate={new Date().toLocaleDateString("en-CA")}
                       value={
                         selectedTask.dueDate
                           ? selectedTask.dueDate.slice(0, 10)
                           : ""
                       }
-                      onChange={(e) =>
+                      placeholder="Set due date"
+                      align="end"
+                      onChange={(val) =>
                         handleUpdateTask(selectedTask.id, {
-                          dueDate: e.target.value || null,
+                          dueDate: val || null,
                         })
                       }
-                      className="h-8 w-[145px] text-xs bg-white"
+                      className="h-8 w-[150px] text-xs bg-white"
                     />
                   </div>
                 </div>

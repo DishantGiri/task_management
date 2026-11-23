@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -181,6 +182,7 @@ export function ProjectFormDialog({
   const priority = watch("priority");
   const managerId = watch("managerId");
   const startDateVal = watch("startDate");
+  const endDateVal = watch("endDate");
   const todayStr = new Date().toLocaleDateString("en-CA");
   const minEndDate =
     startDateVal && startDateVal > todayStr ? startDateVal : todayStr;
@@ -358,11 +360,17 @@ export function ProjectFormDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="proj-start">Start Date</Label>
-              <Input
+              <DatePicker
                 id="proj-start"
-                type="date"
-                min={todayStr}
-                {...register("startDate")}
+                value={startDateVal}
+                minDate={todayStr}
+                placeholder="Select start date"
+                onChange={(val) => {
+                  setValue("startDate", val, { shouldValidate: true });
+                  if (val && endDateVal && endDateVal < val) {
+                    setValue("endDate", "", { shouldValidate: true });
+                  }
+                }}
               />
               {errors.startDate && (
                 <p className="text-[11px] text-red-600">
@@ -372,11 +380,14 @@ export function ProjectFormDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="proj-end">Target End Date</Label>
-              <Input
+              <DatePicker
                 id="proj-end"
-                type="date"
-                min={minEndDate}
-                {...register("endDate")}
+                value={endDateVal}
+                minDate={minEndDate}
+                placeholder="Select end date"
+                onChange={(val) =>
+                  setValue("endDate", val, { shouldValidate: true })
+                }
               />
               {errors.endDate && (
                 <p className="text-[11px] text-red-600">

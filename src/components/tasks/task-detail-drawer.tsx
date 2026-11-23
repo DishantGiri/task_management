@@ -48,6 +48,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -97,10 +98,18 @@ export function TaskDetailDrawer({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Editable fields
+  // Editable draft fields (saved together when "Save Changes" is clicked)
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [editingDesc, setEditingDesc] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<TaskStatus>("TODO");
+  const [draftPriority, setDraftPriority] = useState<Priority>("MEDIUM");
+  const [draftAssigneeId, setDraftAssigneeId] = useState<string | null>(null);
+  const [draftStartDate, setDraftStartDate] = useState("");
+  const [draftDueDate, setDraftDueDate] = useState("");
+  const [draftCollaboratorIds, setDraftCollaboratorIds] = useState<string[]>([]);
+  const [draftTagIds, setDraftTagIds] = useState<string[]>([]);
+  const [draftDependencyIds, setDraftDependencyIds] = useState<string[]>([]);
 
   // Subtask quick add
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
@@ -157,6 +166,19 @@ export function TaskDetailDrawer({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const syncDraftFromTask = useCallback((data: TaskDetailData) => {
+    setTitle(data.title);
+    setDescription(data.description || "");
+    setDraftStatus(data.status);
+    setDraftPriority(data.priority);
+    setDraftAssigneeId(data.assigneeId || null);
+    setDraftStartDate(data.startDate ? data.startDate.slice(0, 10) : "");
+    setDraftDueDate(data.dueDate ? data.dueDate.slice(0, 10) : "");
+    setDraftCollaboratorIds(data.collaborators.map((c) => c.user.id));
+    setDraftTagIds(data.tags.map((t) => t.tag.id));
+    setDraftDependencyIds(data.dependencies.map((d) => d.dependsOnId));
+  }, []);
+
   const loadTask = useCallback(async (id: string) => {
     setLoading(true);
     try {
@@ -168,14 +190,13 @@ export function TaskDetailDrawer({
       }
       const json = await res.json();
       setTask(json.data);
-      setTitle(json.data.title);
-      setDescription(json.data.description || "");
+      syncDraftFromTask(json.data);
     } catch {
       toast.error("Failed to fetch task details");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [syncDraftFromTask]);
 
   useEffect(() => {
     if (open && taskId) {
@@ -203,8 +224,100 @@ export function TaskDetailDrawer({
     task?.project.managerId === currentUserId ||
     task?.assigneeId === currentUserId;
 
-  const handleFieldUpdate = async (patch: Record<string, unknown>) => {
+  const arraysEqual = (a: string[], b: string[]) => {
+    if (a.length !== b.length) return false;
+    const sa = [...a].sort();
+    const sb = [...b].sort();
+    return sa.every((v, i) => v === sb[i]);
+  };
+
+  const origStartDate = task?.startDate ? task.startDate.slice(0, 10) : "";
+  const origDueDate = task?.dueDate ? task.dueDate.slice(0, 10) : "";
+  const origCollaboratorIds = task ? task.collaborators.map((c) => c.user.id) : [];
+  const origTagIds = task ? task.tags.map((t) => t.tag.id) : [];
+  const origDependencyIds = task ? task.dependencies.map((d) => d.dependsOnId) : [];
+
+  const hasUnsavedChanges = Boolean(
+    task &&
+      (draftStatus !== task.status ||
+        (canFullEdit &&
+          (title.trim() !== task.title ||
+            (description || "") !== (task.description || "") ||
+            draftPriority !== task.priority ||
+            (draftAssigneeId || null) !== (task.assigneeId || null) ||
+            draftStartDate !== origStartDate ||
+            draftDueDate !== origDueDate ||
+            !arraysEqual(draftCollaboratorIds, origCollaboratorIds) ||
+            !arraysEqual(draftTagIds, origTagIds) ||
+            !arraysEqual(draftDependencyIds, origDependencyIds))))
+  );
+
+  const handleDiscardChanges = () => {
     if (!task) return;
+    syncDraftFromTask(task);
+    setEditingDesc(false);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!task || !hasUnsavedChanges) return;
+
+    const patch: Record<string, unknown> = {};
+
+    if (draftStatus !== task.status) {
+      patch.status = draftStatus;
+    }
+
+    if (canFullEdit) {
+      const trimmedTitle = title.trim();
+      if (trimmedTitle.length < 2) {
+        toast.error("Title must be at least 2 characters.");
+        return;
+      }
+      if (trimmedTitle.length > 200) {
+        toast.error("Title must be 200 characters or fewer.");
+        return;
+      }
+      if (trimmedTitle !== task.title) {
+        patch.title = trimmedTitle;
+      }
+      if ((description || "") !== (task.description || "")) {
+        patch.description = description;
+      }
+      if (draftPriority !== task.priority) {
+        patch.priority = draftPriority;
+      }
+      if ((draftAssigneeId || null) !== (task.assigneeId || null)) {
+        patch.assigneeId = draftAssigneeId || null;
+      }
+      if (draftStartDate !== origStartDate) {
+        if (draftStartDate && draftStartDate < todayStr) {
+          toast.error("Start date cannot be in the past.");
+          return;
+        }
+        patch.startDate = draftStartDate || null;
+      }
+      if (draftDueDate !== origDueDate) {
+        if (draftStartDate && draftDueDate && draftDueDate < draftStartDate) {
+          toast.error("Due date cannot be earlier than start date.");
+          return;
+        }
+        patch.dueDate = draftDueDate || null;
+      }
+      if (!arraysEqual(draftCollaboratorIds, origCollaboratorIds)) {
+        patch.collaboratorIds = draftCollaboratorIds.filter(
+          (id) => id !== draftAssigneeId
+        );
+      }
+      if (!arraysEqual(draftTagIds, origTagIds)) {
+        patch.tagIds = draftTagIds;
+      }
+      if (!arraysEqual(draftDependencyIds, origDependencyIds)) {
+        patch.dependencyIds = draftDependencyIds;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) return;
+
     setSaving(true);
     const res = await updateTaskAction({ id: task.id, ...patch });
     setSaving(false);
@@ -212,6 +325,8 @@ export function TaskDetailDrawer({
       toast.error(res.error);
       return;
     }
+    setEditingDesc(false);
+    toast.success("Changes saved");
     await loadTask(task.id);
     onUpdated?.();
     router.refresh();
@@ -248,10 +363,19 @@ export function TaskDetailDrawer({
 
   const handleAddSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!task || !subTitle.trim()) return;
+    if (!task) return;
+    const trimmedTitle = subTitle.trim();
+    if (trimmedTitle.length < 2) {
+      toast.error("Subtask title must be at least 2 characters.");
+      return;
+    }
+    if (trimmedTitle.length > 200) {
+      toast.error("Subtask title must be 200 characters or fewer.");
+      return;
+    }
     setAddingSubtask(true);
     const res = await createTaskAction({
-      title: subTitle.trim(),
+      title: trimmedTitle,
       projectId: task.projectId,
       parentId: task.id,
       status: "TODO",
@@ -365,30 +489,26 @@ export function TaskDetailDrawer({
   };
 
   const toggleCollaborator = (uid: string) => {
-    if (!task) return;
-    const current = task.collaborators.map((c) => c.user.id);
-    const next = current.includes(uid)
-      ? current.filter((id) => id !== uid)
-      : [...current, uid];
-    handleFieldUpdate({ collaboratorIds: next });
+    setDraftCollaboratorIds((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    );
   };
 
   const toggleDepartmentCollaborators = (deptUserIds: string[]) => {
-    if (!task) return;
-    const current = task.collaborators.map((c) => c.user.id);
-    const allSelected =
-      deptUserIds.length > 0 &&
-      deptUserIds.every((id) => current.includes(id));
-    const next = allSelected
-      ? current.filter((id) => !deptUserIds.includes(id))
-      : Array.from(new Set([...current, ...deptUserIds]));
-    handleFieldUpdate({ collaboratorIds: next });
+    setDraftCollaboratorIds((prev) => {
+      const allSelected =
+        deptUserIds.length > 0 &&
+        deptUserIds.every((id) => prev.includes(id));
+      return allSelected
+        ? prev.filter((id) => !deptUserIds.includes(id))
+        : Array.from(new Set([...prev, ...deptUserIds]));
+    });
   };
 
   const collaboratorDepartments = (() => {
     const map = new Map<string, { id: string; name: string; userIds: string[] }>();
     for (const u of users) {
-      if (u.id === task?.assigneeId) continue;
+      if (u.id === draftAssigneeId) continue;
       if (u.department?.id && u.department?.name) {
         const entry = map.get(u.department.id);
         if (entry) entry.userIds.push(u.id);
@@ -404,21 +524,15 @@ export function TaskDetailDrawer({
   })();
 
   const toggleTag = (tagId: string) => {
-    if (!task) return;
-    const current = task.tags.map((t) => t.tag.id);
-    const next = current.includes(tagId)
-      ? current.filter((id) => id !== tagId)
-      : [...current, tagId];
-    handleFieldUpdate({ tagIds: next });
+    setDraftTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
   };
 
   const toggleDependency = (depId: string) => {
-    if (!task) return;
-    const current = task.dependencies.map((d) => d.dependsOnId);
-    const next = current.includes(depId)
-      ? current.filter((id) => id !== depId)
-      : [...current, depId];
-    handleFieldUpdate({ dependencyIds: next });
+    setDraftDependencyIds((prev) =>
+      prev.includes(depId) ? prev.filter((id) => id !== depId) : [...prev, depId]
+    );
   };
 
   const insertMention = (name: string) => {
@@ -506,6 +620,41 @@ export function TaskDetailDrawer({
                 </div>
               </div>
 
+              {/* Sticky Unsaved Changes Banner */}
+              {canUpdateStatus && hasUnsavedChanges && (
+                <div className="flex items-center justify-between gap-3 border-b border-[#DFDCFF] bg-[#F5F4FF] px-6 py-2 shrink-0">
+                  <span className="text-xs font-medium text-[#5148C9]">
+                    You have unsaved changes
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={saving}
+                      className="h-7 px-2.5 text-xs bg-white"
+                      onClick={handleDiscardChanges}
+                    >
+                      Discard
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={saving}
+                      className="h-7 px-3 text-xs"
+                      onClick={handleSaveChanges}
+                    >
+                      {saving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      Save Changes
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Scrollable Body */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-5 space-y-6">
                 {/* Parent Breadcrumb if subtask */}
@@ -526,12 +675,8 @@ export function TaskDetailDrawer({
                   {canFullEdit ? (
                     <input
                       value={title}
+                      maxLength={200}
                       onChange={(e) => setTitle(e.target.value)}
-                      onBlur={() => {
-                        if (title.trim() && title.trim() !== task.title) {
-                          handleFieldUpdate({ title: title.trim() });
-                        }
-                      }}
                       className="w-full text-[20px] font-semibold tracking-tight text-[#20232B] bg-transparent border border-transparent rounded px-1 -mx-1 hover:border-[#EAECF0] focus:border-[#635BDB] focus:bg-white focus:outline-none py-0.5"
                     />
                   ) : (
@@ -547,11 +692,9 @@ export function TaskDetailDrawer({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-[#737987]">Status</span>
                     <Select
-                      value={task.status}
+                      value={draftStatus}
                       disabled={!canUpdateStatus}
-                      onValueChange={(v) =>
-                        handleFieldUpdate({ status: v as TaskStatus })
-                      }
+                      onValueChange={(v) => setDraftStatus(v as TaskStatus)}
                     >
                       <SelectTrigger className="h-8 w-[150px] text-xs">
                         <SelectValue />
@@ -569,11 +712,9 @@ export function TaskDetailDrawer({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-[#737987]">Priority</span>
                     <Select
-                      value={task.priority}
+                      value={draftPriority}
                       disabled={!canFullEdit}
-                      onValueChange={(v) =>
-                        handleFieldUpdate({ priority: v as Priority })
-                      }
+                      onValueChange={(v) => setDraftPriority(v as Priority)}
                     >
                       <SelectTrigger className="h-8 w-[150px] text-xs">
                         <SelectValue />
@@ -591,13 +732,17 @@ export function TaskDetailDrawer({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-[#737987]">Assignee</span>
                     <Select
-                      value={task.assigneeId || "__unassigned__"}
+                      value={draftAssigneeId || "__unassigned__"}
                       disabled={!canFullEdit}
-                      onValueChange={(v) =>
-                        handleFieldUpdate({
-                          assigneeId: v === "__unassigned__" ? null : v,
-                        })
-                      }
+                      onValueChange={(v) => {
+                        const nextAssignee = v === "__unassigned__" ? null : v;
+                        setDraftAssigneeId(nextAssignee);
+                        if (nextAssignee) {
+                          setDraftCollaboratorIds((prev) =>
+                            prev.filter((id) => id !== nextAssignee)
+                          );
+                        }
+                      }}
                     >
                       <SelectTrigger className="h-8 w-[150px] text-xs">
                         <SelectValue placeholder="Unassigned" />
@@ -618,11 +763,20 @@ export function TaskDetailDrawer({
                     <span className="text-xs text-[#737987]">Progress</span>
                     <div className="flex items-center gap-2 w-[150px]">
                       <Progress
-                        value={getDisplayTaskProgress(task)}
+                        value={getDisplayTaskProgress({
+                          status: draftStatus,
+                          progress: task.progress,
+                          subtasks: task.subtasks,
+                        })}
                         className="h-2 flex-1"
                       />
                       <span className="text-xs font-semibold text-[#20232B] w-9 text-right">
-                        {getDisplayTaskProgress(task)}%
+                        {getDisplayTaskProgress({
+                          status: draftStatus,
+                          progress: task.progress,
+                          subtasks: task.subtasks,
+                        })}
+                        %
                       </span>
                     </div>
                   </div>
@@ -632,22 +786,21 @@ export function TaskDetailDrawer({
                     <span className="inline-flex items-center gap-1 text-xs text-[#737987]">
                       <Calendar className="h-3.5 w-3.5" /> Start
                     </span>
-                    <Input
-                      type="date"
-                      min={todayStr}
+                    <DatePicker
+                      minDate={todayStr}
                       disabled={!canFullEdit}
-                      value={
-                        task.startDate ? task.startDate.slice(0, 10) : ""
-                      }
-                      onChange={(e) => {
-                        const val = e.target.value;
+                      value={draftStartDate}
+                      placeholder="Set start"
+                      align="end"
+                      onChange={(val) => {
                         if (val && val < todayStr) {
                           toast.error("Start date cannot be in the past");
                           return;
                         }
-                        handleFieldUpdate({
-                          startDate: val || null,
-                        });
+                        setDraftStartDate(val);
+                        if (val && draftDueDate && draftDueDate < val) {
+                          setDraftDueDate("");
+                        }
                       }}
                       className="h-8 w-[150px] text-xs"
                     />
@@ -658,25 +811,24 @@ export function TaskDetailDrawer({
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 text-xs",
-                        isTaskOverdue(task.dueDate, task.status)
+                        isTaskOverdue(draftDueDate || null, draftStatus)
                           ? "text-[#EF4444] font-medium"
                           : "text-[#737987]"
                       )}
                     >
                       <Calendar className="h-3.5 w-3.5" /> Due
                     </span>
-                    <Input
-                      type="date"
-                      min={
-                        task.startDate && task.startDate.slice(0, 10) > todayStr
-                          ? task.startDate.slice(0, 10)
+                    <DatePicker
+                      minDate={
+                        draftStartDate && draftStartDate > todayStr
+                          ? draftStartDate
                           : todayStr
                       }
                       disabled={!canFullEdit}
-                      value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
-                      onChange={(e) =>
-                        handleFieldUpdate({ dueDate: e.target.value || null })
-                      }
+                      value={draftDueDate}
+                      placeholder="Set due"
+                      align="end"
+                      onChange={setDraftDueDate}
                       className="h-8 w-[150px] text-xs"
                     />
                   </div>
@@ -697,13 +849,10 @@ export function TaskDetailDrawer({
                             By dept:
                           </span>
                           {collaboratorDepartments.map((dept) => {
-                            const currentIds = task.collaborators.map(
-                              (c) => c.user.id
-                            );
                             const allSelected =
                               dept.userIds.length > 0 &&
                               dept.userIds.every((id) =>
-                                currentIds.includes(id)
+                                draftCollaboratorIds.includes(id)
                               );
                             return (
                               <button
@@ -732,11 +881,9 @@ export function TaskDetailDrawer({
                       )}
                       <div className="flex flex-wrap items-center gap-1.5">
                         {users
-                          .filter((u) => u.id !== task.assigneeId)
+                          .filter((u) => u.id !== draftAssigneeId)
                           .map((u) => {
-                            const active = task.collaborators.some(
-                              (c) => c.user.id === u.id
-                            );
+                            const active = draftCollaboratorIds.includes(u.id);
                             if (!canFullEdit && !active) return null;
                             return (
                               <button
@@ -760,7 +907,7 @@ export function TaskDetailDrawer({
                               </button>
                             );
                           })}
-                        {!canFullEdit && task.collaborators.length === 0 && (
+                        {!canFullEdit && draftCollaboratorIds.length === 0 && (
                           <span className="text-xs text-[#9CA3AF]">None</span>
                         )}
                       </div>
@@ -774,7 +921,7 @@ export function TaskDetailDrawer({
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5 flex-1">
                       {tags.map((tag) => {
-                        const active = task.tags.some((t) => t.tag.id === tag.id);
+                        const active = draftTagIds.includes(tag.id);
                         if (!canFullEdit && !active) return null;
                         return (
                           <button
@@ -811,9 +958,7 @@ export function TaskDetailDrawer({
                           .filter((t) => t.id !== task.id)
                           .slice(0, 12)
                           .map((dep) => {
-                            const active = task.dependencies.some(
-                              (d) => d.dependsOnId === dep.id
-                            );
+                            const active = draftDependencyIds.includes(dep.id);
                             if (!canFullEdit && !active) return null;
                             return (
                               <button
@@ -832,7 +977,7 @@ export function TaskDetailDrawer({
                               </button>
                             );
                           })}
-                        {!canFullEdit && task.dependencies.length === 0 && (
+                        {!canFullEdit && draftDependencyIds.length === 0 && (
                           <span className="text-xs text-[#9CA3AF]">None</span>
                         )}
                       </div>
@@ -864,27 +1009,15 @@ export function TaskDetailDrawer({
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="Add detailed task description..."
                       />
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          onClick={async () => {
-                            await handleFieldUpdate({ description });
-                            setEditingDesc(false);
-                          }}
+                      <div className="flex items-center justify-between text-[11px] text-[#737987]">
+                        <span>Click Save at the top to apply all changes.</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingDesc(false)}
+                          className="font-medium text-[#635BDB] hover:text-[#5148C9]"
                         >
-                          <Check className="h-3.5 w-3.5" />
-                          Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setDescription(task.description || "");
-                            setEditingDesc(false);
-                          }}
-                        >
-                          Cancel
-                        </Button>
+                          Done editing
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -895,7 +1028,7 @@ export function TaskDetailDrawer({
                         canFullEdit && "cursor-text hover:border-[#D1D5DB]"
                       )}
                     >
-                      {task.description || (
+                      {description || (
                         <span className="text-[#9CA3AF]">
                           No description provided.{" "}
                           {canFullEdit ? "Click to add details." : ""}
@@ -948,12 +1081,25 @@ export function TaskDetailDrawer({
                         onSubmit={handleAddSubtask}
                         className="rounded-lg border border-[#635BDB]/30 bg-[#F0EFFF]/30 p-3 space-y-2.5"
                       >
-                        <Input
-                          value={subTitle}
-                          onChange={(e) => setSubTitle(e.target.value)}
-                          placeholder="Subtask title (e.g., Build hero section)"
-                          autoFocus
-                        />
+                        <div className="space-y-1">
+                          <Input
+                            value={subTitle}
+                            maxLength={200}
+                            onChange={(e) => setSubTitle(e.target.value)}
+                            placeholder="Subtask title (e.g., Build hero section)"
+                            autoFocus
+                          />
+                          <div className="flex justify-end text-[10.5px] text-[#737987]">
+                            <span
+                              className={cn(
+                                subTitle.length >= 190 && "text-[#F59E0B] font-medium",
+                                subTitle.length >= 200 && "text-[#EF4444] font-medium"
+                              )}
+                            >
+                              {subTitle.length}/200
+                            </span>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <Select
                             value={subAssigneeId || "__unassigned__"}
@@ -991,11 +1137,12 @@ export function TaskDetailDrawer({
                             </SelectContent>
                           </Select>
 
-                          <Input
-                            type="date"
-                            min={todayStr}
+                          <DatePicker
+                            minDate={todayStr}
                             value={subDueDate}
-                            onChange={(e) => setSubDueDate(e.target.value)}
+                            placeholder="Due date"
+                            align="end"
+                            onChange={setSubDueDate}
                             className="h-8 text-xs"
                           />
                         </div>

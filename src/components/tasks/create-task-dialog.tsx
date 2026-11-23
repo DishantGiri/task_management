@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -124,6 +125,7 @@ export function CreateTaskDialog({
   const priority = watch("priority");
   const assigneeId = watch("assigneeId");
   const startDate = watch("startDate");
+  const dueDate = watch("dueDate");
   const todayStr = new Date().toLocaleDateString("en-CA");
   const minDueDate =
     startDate && startDate > todayStr ? startDate : todayStr;
@@ -236,6 +238,7 @@ export function CreateTaskDialog({
             <Label htmlFor="task-title">Title</Label>
             <Input
               id="task-title"
+              maxLength={200}
               placeholder={
                 parentId
                   ? "e.g., Implement responsive navigation bar"
@@ -351,11 +354,17 @@ export function CreateTaskDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="task-start">Start Date</Label>
-              <Input
+              <DatePicker
                 id="task-start"
-                type="date"
-                min={todayStr}
-                {...register("startDate")}
+                value={startDate}
+                minDate={todayStr}
+                placeholder="Select start date"
+                onChange={(val) => {
+                  setValue("startDate", val, { shouldValidate: true });
+                  if (val && dueDate && dueDate < val) {
+                    setValue("dueDate", "", { shouldValidate: true });
+                  }
+                }}
               />
               {errors.startDate && (
                 <p className="text-[11px] text-red-600">
@@ -366,11 +375,14 @@ export function CreateTaskDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="task-due">Due Date</Label>
-              <Input
+              <DatePicker
                 id="task-due"
-                type="date"
-                min={minDueDate}
-                {...register("dueDate")}
+                value={dueDate}
+                minDate={minDueDate}
+                placeholder="Select due date"
+                onChange={(val) =>
+                  setValue("dueDate", val, { shouldValidate: true })
+                }
               />
               {errors.dueDate && (
                 <p className="text-[11px] text-red-600">

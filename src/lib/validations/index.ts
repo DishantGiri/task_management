@@ -108,8 +108,16 @@ export const projectUpdateSchema = projectBaseSchema
 
 export const taskCreateSchema = z
   .object({
-    title: z.string().min(2, "Task title is required").max(200),
-    description: z.string().max(10000).nullable().optional(),
+    title: z
+      .string()
+      .trim()
+      .min(2, "Title must be at least 2 characters")
+      .max(200, "Title must be 200 characters or fewer"),
+    description: z
+      .string()
+      .max(10000, "Description must be 10,000 characters or fewer")
+      .nullable()
+      .optional(),
     projectId: z.string().min(1, "Project is required"),
     parentId: z.string().nullable().optional(),
     status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]).default("TODO"),
@@ -148,8 +156,17 @@ export const taskCreateSchema = z
 
 export const taskUpdateSchema = z.object({
   id: z.string().min(1),
-  title: z.string().min(2).max(200).optional(),
-  description: z.string().max(10000).nullable().optional(),
+  title: z
+    .string()
+    .trim()
+    .min(2, "Title must be at least 2 characters")
+    .max(200, "Title must be 200 characters or fewer")
+    .optional(),
+  description: z
+    .string()
+    .max(10000, "Description must be 10,000 characters or fewer")
+    .nullable()
+    .optional(),
   status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]).optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
   assigneeId: z.string().nullable().optional(),
