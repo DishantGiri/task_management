@@ -634,15 +634,21 @@ export function TaskDetailDrawer({
                     </span>
                     <Input
                       type="date"
+                      min={todayStr}
                       disabled={!canFullEdit}
                       value={
                         task.startDate ? task.startDate.slice(0, 10) : ""
                       }
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val && val < todayStr) {
+                          toast.error("Start date cannot be in the past");
+                          return;
+                        }
                         handleFieldUpdate({
-                          startDate: e.target.value || null,
-                        })
-                      }
+                          startDate: val || null,
+                        });
+                      }}
                       className="h-8 w-[150px] text-xs"
                     />
                   </div>
@@ -661,7 +667,11 @@ export function TaskDetailDrawer({
                     </span>
                     <Input
                       type="date"
-                      min={todayStr}
+                      min={
+                        task.startDate && task.startDate.slice(0, 10) > todayStr
+                          ? task.startDate.slice(0, 10)
+                          : todayStr
+                      }
                       disabled={!canFullEdit}
                       value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
                       onChange={(e) =>

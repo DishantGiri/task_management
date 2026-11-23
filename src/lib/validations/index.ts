@@ -80,7 +80,13 @@ export const taskCreateSchema = z
     collaboratorIds: z.array(z.string()).default([]),
     tagIds: z.array(z.string()).default([]),
     dependencyIds: z.array(z.string()).default([]),
-    startDate: z.string().nullable().optional(),
+    startDate: z
+      .string()
+      .nullable()
+      .optional()
+      .refine(isNotPastDate, {
+        message: "Start date cannot be in the past",
+      }),
     dueDate: z
       .string()
       .nullable()
@@ -112,7 +118,13 @@ export const taskUpdateSchema = z.object({
   collaboratorIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   dependencyIds: z.array(z.string()).optional(),
-  startDate: z.string().nullable().optional(),
+  startDate: z
+    .string()
+    .nullable()
+    .optional()
+    .refine(isNotPastDate, {
+      message: "Start date cannot be in the past",
+    }),
   dueDate: z.string().nullable().optional(),
   position: z.number().int().min(0).optional(),
 });

@@ -351,7 +351,17 @@ export function CreateTaskDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="task-start">Start Date</Label>
-              <Input id="task-start" type="date" {...register("startDate")} />
+              <Input
+                id="task-start"
+                type="date"
+                min={todayStr}
+                {...register("startDate")}
+              />
+              {errors.startDate && (
+                <p className="text-[11px] text-red-600">
+                  {errors.startDate.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">

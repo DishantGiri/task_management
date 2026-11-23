@@ -180,6 +180,15 @@ export function ProjectFormDialog({
   const status = watch("status");
   const priority = watch("priority");
   const managerId = watch("managerId");
+  const startDateVal = watch("startDate");
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const minStartDate =
+    editingProject?.startDate &&
+    editingProject.startDate.slice(0, 10) < todayStr
+      ? editingProject.startDate.slice(0, 10)
+      : todayStr;
+  const minEndDate =
+    startDateVal && startDateVal > todayStr ? startDateVal : todayStr;
 
   const toggleMember = (uid: string) => {
     setSelectedMembers((prev) =>
@@ -354,11 +363,21 @@ export function ProjectFormDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="proj-start">Start Date</Label>
-              <Input id="proj-start" type="date" {...register("startDate")} />
+              <Input
+                id="proj-start"
+                type="date"
+                min={minStartDate}
+                {...register("startDate")}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="proj-end">Target End Date</Label>
-              <Input id="proj-end" type="date" {...register("endDate")} />
+              <Input
+                id="proj-end"
+                type="date"
+                min={minEndDate}
+                {...register("endDate")}
+              />
             </div>
           </div>
 
