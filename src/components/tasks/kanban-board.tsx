@@ -25,6 +25,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  AlertTriangle,
   Calendar,
   GitBranch,
   GripVertical,
@@ -33,7 +34,7 @@ import {
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { TaskStatus } from "@prisma/client";
+import type { Role, TaskStatus } from "@prisma/client";
 import type { TaskListItem } from "@/types";
 import { moveTaskKanbanAction } from "@/actions/tasks";
 import {
@@ -47,6 +48,15 @@ import {
 import { PriorityBadge } from "@/components/shared/badges";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const COLUMNS: { id: TaskStatus; label: string; dot: string }[] = [
   { id: "TODO", label: "To Do", dot: "bg-slate-400" },
@@ -128,6 +138,27 @@ function KanbanTaskCard({
       <p className="text-[13px] font-medium leading-snug text-[#20232B] line-clamp-2 group-hover:text-[#5148C9] transition-colors">
         {task.title}
       </p>
+
+      {/* Active Blocker Indicator (Modern Agile visibility) */}
+      {task.status !== "DONE" &&
+        task.dependencies.some((d) => d.dependsOn.status !== "DONE") && (() => {
+          const openBlockers = task.dependencies.filter(
+            (d) => d.dependsOn.status !== "DONE"
+          );
+          const tooltip = openBlockers
+            .map((d) => `${d.dependsOn.taskKey}: ${d.dependsOn.title}`)
+            .join("\n");
+          return (
+            <div className="mt-2" title={`Blocked by:\n${tooltip}`}>
+              <span className="inline-flex items-center gap-1 rounded-[4px] border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                {openBlockers.length === 1
+                  ? `Blocked by ${openBlockers[0].dependsOn.taskKey}`
+                  : `Blocked (${openBlockers.length})`}
+              </span>
+            </div>
+          );
+        })()}
 
       {/* Tags */}
       {task.tags.length > 0 && (
@@ -306,15 +337,26 @@ export function KanbanBoard({
   onSelectTask,
   onQuickAdd,
   canCreate,
+  currentUserRole = "EMPLOYEE",
 }: {
   tasks: TaskListItem[];
   onTasksChange: (next: TaskListItem[]) => void;
   onSelectTask: (id: string) => void;
   onQuickAdd: (status: TaskStatus) => void;
   canCreate: boolean;
+  currentUserRole?: Role;
 }) {
   const router = useRouter();
   const [activeTask, setActiveTask] = useState<TaskListItem | null>(null);
+  const [pendingBlockedMove, setPendingBlockedMove] = useState<{
+    task: TaskListItem;
+    targetStatus: TaskStatus;
+    newPosition: number;
+    openBlockers: { taskKey: string; title: string }[];
+    optimisticTasks: TaskListItem[];
+    previousTasks: TaskListItem[];
+  } | null>(null);
+  const [confirmingMove, setConfirmingMove] = useState(false);
   const initialStatusRef = useRef<TaskStatus | null>(null);
   const snapshotRef = useRef<TaskListItem[]>(tasks);
 
@@ -408,22 +450,50 @@ export function KanbanBoard({
       return;
     }
 
+    const openBlockers = currentTask.dependencies
+      .filter((d) => d.dependsOn.status !== "DONE")
+      .map((d) => ({
+        taskKey: d.dependsOn.taskKey,
+        title: d.dependsOn.title,
+      }));
+    const openBlockerKeys = openBlockers.map((b) => b.taskKey);
+    const isAdminOrManager =
+      currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
+
     if (startStatus && startStatus !== targetStatus) {
       const incompleteSubtasks = currentTask.subtasks.filter(
         (s) => s.status !== "DONE"
       ).length;
-      const transitionError = validateTaskStatusTransition({
+
+      // Validate all non-blocker rules first (unassigned, start before done, subtasks, etc.)
+      const baseError = validateTaskStatusTransition({
         currentStatus: startStatus,
         nextStatus: targetStatus,
         isSubtask: Boolean(currentTask.parentId),
         totalSubtasks: currentTask.subtasks.length,
         incompleteSubtasks,
-        canMarkComplete: true, // Server action also enforces QA/Manager/Admin role check
+        canMarkComplete: true,
         hasAssignee: Boolean(currentTask.assignee),
+        incompleteBlockers: isAdminOrManager ? [] : openBlockerKeys,
       });
-      if (transitionError) {
+      if (baseError) {
         onTasksChange(snapshotRef.current);
-        toast.error(transitionError);
+        toast.error(baseError);
+        return;
+      }
+
+      // Ask for explicit confirmation warning whenever moving a blocked ticket to a new status
+      if (openBlockers.length > 0 && targetStatus !== "TODO") {
+        const optimisticSnapshot = tasks;
+        onTasksChange(snapshotRef.current);
+        setPendingBlockedMove({
+          task: currentTask,
+          targetStatus,
+          newPosition,
+          openBlockers,
+          optimisticTasks: optimisticSnapshot,
+          previousTasks: snapshotRef.current,
+        });
         return;
       }
     }
@@ -447,32 +517,130 @@ export function KanbanBoard({
     router.refresh();
   };
 
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
-        {COLUMNS.map((col) => (
-          <KanbanColumn
-            key={col.id}
-            column={col}
-            tasks={tasks.filter((t) => t.status === col.id)}
-            onSelectTask={onSelectTask}
-            onQuickAdd={onQuickAdd}
-            canCreate={canCreate}
-          />
-        ))}
-      </div>
+  const handleConfirmBlockedMove = async () => {
+    if (!pendingBlockedMove) return;
+    const { task, targetStatus, newPosition, optimisticTasks, previousTasks } =
+      pendingBlockedMove;
+    setConfirmingMove(true);
+    onTasksChange(optimisticTasks);
 
-      <DragOverlay>
-        {activeTask ? (
-          <KanbanTaskCard task={activeTask} onSelect={() => {}} isOverlay />
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+    const isAdminOrManager =
+      currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
+    const res = await moveTaskKanbanAction(
+      task.id,
+      targetStatus,
+      newPosition,
+      isAdminOrManager
+    );
+    setConfirmingMove(false);
+    setPendingBlockedMove(null);
+
+    if (res.error) {
+      onTasksChange(previousTasks);
+      toast.error(res.error);
+      return;
+    }
+
+    toast.warning(
+      `${task.taskKey} moved to ${STATUS_CONFIG[targetStatus].label} with active blockers.`
+    );
+    router.refresh();
+  };
+
+  return (
+    <>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+          {COLUMNS.map((col) => (
+            <KanbanColumn
+              key={col.id}
+              column={col}
+              tasks={tasks.filter((t) => t.status === col.id)}
+              onSelectTask={onSelectTask}
+              onQuickAdd={onQuickAdd}
+              canCreate={canCreate}
+            />
+          ))}
+        </div>
+
+        <DragOverlay>
+          {activeTask ? (
+            <KanbanTaskCard task={activeTask} onSelect={() => {}} isOverlay />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {/* Blocked Ticket Warning Confirmation Dialog */}
+      <Dialog
+        open={!!pendingBlockedMove}
+        onOpenChange={(open) => {
+          if (!open) setPendingBlockedMove(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-800">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+              Task Has Unfinished Blockers
+            </DialogTitle>
+            <DialogDescription>
+              <strong className="text-[#20232B]">
+                {pendingBlockedMove?.task.taskKey}
+              </strong>{" "}
+              is currently blocked by unfinished prerequisite task(s). Are you
+              sure you want to move it to{" "}
+              <strong className="text-[#20232B]">
+                {pendingBlockedMove
+                  ? STATUS_CONFIG[pendingBlockedMove.targetStatus].label
+                  : ""}
+              </strong>
+              ?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+              Blocking Tasks
+            </p>
+            {pendingBlockedMove?.openBlockers.map((b) => (
+              <div
+                key={b.taskKey}
+                className="flex items-center gap-2 text-xs text-amber-950"
+              >
+                <span className="font-mono font-semibold shrink-0">
+                  {b.taskKey}
+                </span>
+                <span className="truncate">{b.title}</span>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={confirmingMove}
+              onClick={() => setPendingBlockedMove(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={confirmingMove}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={handleConfirmBlockedMove}
+            >
+              Move Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

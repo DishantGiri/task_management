@@ -182,6 +182,7 @@ export const taskUpdateSchema = z.object({
     }),
   dueDate: z.string().nullable().optional(),
   position: z.number().int().min(0).optional(),
+  forceBlockedOverride: z.boolean().optional(),
 });
 
 export const commentCreateSchema = z.object({

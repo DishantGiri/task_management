@@ -171,6 +171,9 @@ export function TaskDetailDrawer({
   // Delete dialog
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [blockedSaveWarning, setBlockedSaveWarning] = useState<
+    { taskKey: string; title: string }[] | null
+  >(null);
   const needsBoardRefreshRef = useRef(false);
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -295,15 +298,29 @@ export function TaskDetailDrawer({
     setEditingDesc(false);
   };
 
-  const handleSaveChanges = async () => {
+  const handleSaveChanges = async (forceBlockedOverride = false) => {
     if (!task || !hasUnsavedChanges) return;
 
     const patch: Record<string, unknown> = {};
+    const isAdminOrManager =
+      currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
 
     if (draftStatus !== task.status) {
       const incompleteSubtasks = task.subtasks.filter(
         (s) => s.status !== "DONE"
       ).length;
+      const openBlockers = task.dependencies
+        .filter(
+          (d) =>
+            draftDependencyIds.includes(d.dependsOnId) &&
+            d.dependsOn.status !== "DONE"
+        )
+        .map((d) => ({
+          taskKey: d.dependsOn.taskKey,
+          title: d.dependsOn.title,
+        }));
+      const incompleteBlockers = openBlockers.map((b) => b.taskKey);
+
       const transitionError = validateTaskStatusTransition({
         currentStatus: task.status,
         nextStatus: draftStatus,
@@ -312,12 +329,38 @@ export function TaskDetailDrawer({
         incompleteSubtasks,
         canMarkComplete,
         hasAssignee: Boolean(draftAssigneeId),
+        incompleteBlockers:
+          isAdminOrManager && forceBlockedOverride ? [] : incompleteBlockers,
       });
       if (transitionError) {
+        // For Admin/Manager moving a blocked task to In Review/Done, prompt confirmation instead of silent block
+        if (
+          isAdminOrManager &&
+          !forceBlockedOverride &&
+          openBlockers.length > 0 &&
+          (draftStatus === "IN_REVIEW" || draftStatus === "DONE")
+        ) {
+          setBlockedSaveWarning(openBlockers);
+          return;
+        }
         toast.error(transitionError);
         return;
       }
+
+      // Prompt confirmation warning whenever moving a blocked task out of To Do
+      if (
+        !forceBlockedOverride &&
+        openBlockers.length > 0 &&
+        draftStatus !== "TODO"
+      ) {
+        setBlockedSaveWarning(openBlockers);
+        return;
+      }
+
       patch.status = draftStatus;
+      if (forceBlockedOverride && isAdminOrManager) {
+        patch.forceBlockedOverride = true;
+      }
     }
 
     if (canFullEdit) {
@@ -737,7 +780,7 @@ export function TaskDetailDrawer({
                       size="sm"
                       disabled={saving}
                       className="h-7 px-3 text-xs"
-                      onClick={handleSaveChanges}
+                      onClick={() => handleSaveChanges(false)}
                     >
                       {saving ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1618,6 +1661,62 @@ export function TaskDetailDrawer({
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Blocked Ticket Save Confirmation Warning Dialog */}
+      <Dialog
+        open={!!blockedSaveWarning}
+        onOpenChange={(o) => {
+          if (!o) setBlockedSaveWarning(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-amber-800">
+              Task Has Unfinished Blockers
+            </DialogTitle>
+            <DialogDescription>
+              <strong className="text-[#20232B]">{task?.taskKey}</strong> is
+              still blocked by unfinished prerequisite task(s). Are you sure you
+              want to change its status anyway?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+              Blocking Tasks
+            </p>
+            {blockedSaveWarning?.map((b) => (
+              <div
+                key={b.taskKey}
+                className="flex items-center gap-2 text-xs text-amber-950"
+              >
+                <span className="font-mono font-semibold shrink-0">
+                  {b.taskKey}
+                </span>
+                <span className="truncate">{b.title}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBlockedSaveWarning(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={async () => {
+                setBlockedSaveWarning(null);
+                await handleSaveChanges(true);
+              }}
+            >
+              Confirm &amp; Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Attachment Preview Modal */}
       <Dialog

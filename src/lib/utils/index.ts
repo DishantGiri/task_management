@@ -128,6 +128,7 @@ export function validateTaskStatusTransition(params: {
   incompleteSubtasks: number;
   canMarkComplete: boolean;
   hasAssignee?: boolean;
+  incompleteBlockers?: string[];
 }): string | null {
   const {
     currentStatus,
@@ -137,6 +138,7 @@ export function validateTaskStatusTransition(params: {
     incompleteSubtasks,
     canMarkComplete,
     hasAssignee = true,
+    incompleteBlockers = [],
   } = params;
 
   if (currentStatus === nextStatus) return null;
@@ -144,6 +146,16 @@ export function validateTaskStatusTransition(params: {
   // 0. Cannot move a task out of To Do while it is unassigned
   if (hasAssignee === false && currentStatus === "TODO" && nextStatus !== "TODO") {
     return "Please assign this task before changing its status.";
+  }
+
+  // 0b. Modern Agile dependency gate: cannot hand off to In Review / QA or Done while blocked
+  if (
+    incompleteBlockers.length > 0 &&
+    (nextStatus === "IN_REVIEW" || nextStatus === "DONE")
+  ) {
+    return `Blocked by ${incompleteBlockers.join(", ")}. Complete blocking tasks before moving to ${
+      nextStatus === "IN_REVIEW" ? "In Review / QA" : "Done"
+    }.`;
   }
 
   // 1. Cannot jump directly from To Do to Done without starting work first

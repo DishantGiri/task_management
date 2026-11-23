@@ -21,8 +21,13 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+const cachedPrisma =
+  globalForPrisma.prisma && "milestone" in globalForPrisma.prisma
+    ? globalForPrisma.prisma
+    : undefined;
+
 export const prisma =
-  globalForPrisma.prisma ??
+  cachedPrisma ??
   new PrismaClient({
     adapter: createAdapter(),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],

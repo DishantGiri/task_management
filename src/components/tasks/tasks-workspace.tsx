@@ -382,6 +382,7 @@ export function TasksWorkspace({
           onSelectTask={handleOpenTask}
           onQuickAdd={handleQuickAdd}
           canCreate={canCreate}
+          currentUserRole={currentUserRole}
         />
       )}
 

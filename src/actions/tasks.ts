@@ -251,6 +251,11 @@ export async function updateTaskAction(values: unknown) {
       include: {
         _count: { select: { subtasks: true } },
         subtasks: { select: { status: true } },
+        dependencies: {
+          include: {
+            dependsOn: { select: { id: true, taskKey: true, status: true } },
+          },
+        },
       },
     });
     if (!existing) return { error: "Task not found." };
@@ -266,6 +271,21 @@ export async function updateTaskAction(values: unknown) {
       const incompleteSubtasks = existing.subtasks.filter(
         (s) => s.status !== "DONE"
       ).length;
+      const incompleteBlockers = existing.dependencies
+        .filter((d) => {
+          // If the user is also removing this dependency in the same save, don't block on it
+          if (perm.fullEdit && data.dependencyIds !== undefined) {
+            return (
+              data.dependencyIds.includes(d.dependsOn.id) &&
+              d.dependsOn.status !== "DONE"
+            );
+          }
+          return d.dependsOn.status !== "DONE";
+        })
+        .map((d) => d.dependsOn.taskKey);
+      const canOverrideBlockers =
+        Boolean(data.forceBlockedOverride) &&
+        (user.role === "ADMIN" || user.role === "MANAGER");
       const transitionError = validateTaskStatusTransition({
         currentStatus: existing.status,
         nextStatus: data.status,
@@ -274,6 +294,7 @@ export async function updateTaskAction(values: unknown) {
         incompleteSubtasks,
         canMarkComplete: canUserMarkTaskComplete(user),
         hasAssignee: Boolean(effectiveAssigneeId),
+        incompleteBlockers: canOverrideBlockers ? [] : incompleteBlockers,
       });
       if (transitionError) {
         return { error: transitionError };
@@ -438,12 +459,14 @@ export async function updateTaskAction(values: unknown) {
 export async function moveTaskKanbanAction(
   taskId: string,
   newStatus: TaskStatus,
-  newPosition: number
+  newPosition: number,
+  forceBlockedOverride = false
 ) {
   return updateTaskAction({
     id: taskId,
     status: newStatus,
     position: newPosition,
+    forceBlockedOverride,
   });
 }
 
