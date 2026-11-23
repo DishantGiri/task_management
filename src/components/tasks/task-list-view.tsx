@@ -156,18 +156,20 @@ export function TaskListView({
   }
 
   return (
-    <div className="rounded-lg border border-[#EAECF0] bg-white shadow-subtle overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[780px]">
-          <thead>
-            <tr className="border-b border-[#EAECF0] bg-[#F7F8FA] text-[11px] font-semibold uppercase tracking-wider text-[#737987]">
-              <th className="py-2.5 pl-4 pr-3 w-[38%]">Task</th>
-              {showProjectColumn && <th className="py-2.5 px-3">Project</th>}
-              <th className="py-2.5 px-3">Assignee</th>
-              <th className="py-2.5 px-3">Priority</th>
-              <th className="py-2.5 px-3">Status</th>
-              <th className="py-2.5 px-3">Due Date</th>
-              <th className="py-2.5 pl-3 pr-4 w-[130px]">Progress</th>
+    <div className="w-full max-w-full rounded-lg border border-[#EAECF0] bg-white shadow-subtle overflow-hidden">
+      <div className="w-full overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] min-h-[320px]">
+        <table className="w-full text-left border-collapse min-w-[960px]">
+          <thead className="sticky top-0 z-10 bg-[#F7F8FA] shadow-[inset_0_-1px_0_#EAECF0]">
+            <tr className="text-[11px] font-semibold uppercase tracking-wider text-[#737987]">
+              <th className="py-2.5 pl-4 pr-3 min-w-[260px] max-w-[340px]">Task</th>
+              {showProjectColumn && (
+                <th className="py-2.5 px-3 whitespace-nowrap">Project</th>
+              )}
+              <th className="py-2.5 px-3 whitespace-nowrap">Assignee</th>
+              <th className="py-2.5 px-3 whitespace-nowrap">Priority</th>
+              <th className="py-2.5 px-3 whitespace-nowrap">Status</th>
+              <th className="py-2.5 px-3 whitespace-nowrap">Due Date</th>
+              <th className="py-2.5 pl-3 pr-4 w-[140px] whitespace-nowrap">Progress</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#EAECF0] text-[13px]">
