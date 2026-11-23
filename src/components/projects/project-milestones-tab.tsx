@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PriorityBadge, TaskStatusBadge } from "@/components/shared/badges";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 const MILESTONE_STATUS_CONFIG = {
   UPCOMING: {
@@ -85,6 +86,15 @@ export function ProjectMilestonesTab({
   const [editing, setEditing] = useState<MilestoneItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 6;
+
+  const totalPages = Math.max(1, Math.ceil(milestones.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedMilestones = milestones.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   // Form state
   const [title, setTitle] = useState("");
@@ -265,7 +275,7 @@ export function ProjectMilestonesTab({
         </div>
       ) : (
         <div className="space-y-3">
-          {milestones.map((m) => {
+          {paginatedMilestones.map((m) => {
             const cfg = MILESTONE_STATUS_CONFIG[m.status];
             const overdue =
               m.status !== "COMPLETED" &&
@@ -458,6 +468,14 @@ export function ProjectMilestonesTab({
           })}
         </div>
       )}
+
+      <PaginationBar
+        currentPage={safePage}
+        totalItems={milestones.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+        itemLabel="milestones"
+      />
 
       {/* Create / Edit Milestone Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

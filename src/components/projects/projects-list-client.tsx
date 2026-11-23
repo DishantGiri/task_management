@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ProjectFormDialog } from "@/components/projects/project-form-dialog";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 export function ProjectsListClient({
   projects,
@@ -64,6 +65,8 @@ export function ProjectsListClient({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 9;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectListItem | null>(null);
@@ -89,6 +92,13 @@ export function ProjectsListClient({
       return true;
     });
   }, [projects, search, statusFilter, priorityFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedProjects = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   const handleDelete = async () => {
     if (!deletingProject) return;
@@ -183,7 +193,7 @@ export function ProjectsListClient({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((project) => {
+          {paginatedProjects.map((project) => {
             const canManage =
               currentUserRole === "ADMIN" ||
               (currentUserRole === "MANAGER" &&
@@ -312,6 +322,14 @@ export function ProjectsListClient({
           })}
         </div>
       )}
+
+      <PaginationBar
+        currentPage={safePage}
+        totalItems={filtered.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+        itemLabel="projects"
+      />
 
       <ProjectFormDialog
         open={formOpen}

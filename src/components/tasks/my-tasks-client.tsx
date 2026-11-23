@@ -25,6 +25,7 @@ import type {
 import { updateTaskAction } from "@/actions/tasks";
 import { cn, formatCompactDate, isTaskOverdue } from "@/lib/utils";
 import { PriorityBadge } from "@/components/shared/badges";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -124,7 +125,14 @@ export function MyTasksClient({
     router.refresh();
   };
 
-  const renderTaskList = (items: TaskListItem[], emptyMessage: string) => {
+  const [bucketPage, setBucketPage] = useState<Record<string, number>>({});
+  const MY_TASKS_PAGE_SIZE = 10;
+
+  const renderTaskList = (
+    items: TaskListItem[],
+    emptyMessage: string,
+    bucketKey = "default"
+  ) => {
     if (items.length === 0) {
       return (
         <div className="rounded-lg border border-dashed border-[#D9DEE7] bg-white py-12 text-center">
@@ -133,9 +141,18 @@ export function MyTasksClient({
       );
     }
 
+    const rawPage = bucketPage[bucketKey] || 1;
+    const totalPages = Math.max(1, Math.ceil(items.length / MY_TASKS_PAGE_SIZE));
+    const safePage = Math.min(rawPage, totalPages);
+    const pagedItems = items.slice(
+      (safePage - 1) * MY_TASKS_PAGE_SIZE,
+      safePage * MY_TASKS_PAGE_SIZE
+    );
+
     return (
+      <div className="space-y-3">
       <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white shadow-subtle">
-        {items.map((task) => {
+        {pagedItems.map((task) => {
           const isDone = task.status === "DONE";
           const overdue = isTaskOverdue(task.dueDate, task.status);
           const doneSubs = task.subtasks.filter((s) => s.status === "DONE").length;
@@ -238,6 +255,16 @@ export function MyTasksClient({
             </div>
           );
         })}
+      </div>
+      <PaginationBar
+        currentPage={safePage}
+        totalItems={items.length}
+        pageSize={MY_TASKS_PAGE_SIZE}
+        onPageChange={(next) =>
+          setBucketPage((prev) => ({ ...prev, [bucketKey]: next }))
+        }
+        itemLabel="tasks"
+      />
       </div>
     );
   };

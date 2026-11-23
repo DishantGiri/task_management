@@ -19,6 +19,7 @@ import {
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/avatar";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 interface InboxNotification {
   id: string;
@@ -39,9 +40,17 @@ export function InboxClient({
   const router = useRouter();
   const [items, setItems] = useState(initialNotifications);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 12;
 
   const unreadCount = items.filter((n) => !n.isRead).length;
   const visible = filter === "unread" ? items.filter((n) => !n.isRead) : items;
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedVisible = visible.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   const handleOpen = async (item: InboxNotification) => {
     if (!item.isRead) {
@@ -156,7 +165,7 @@ export function InboxClient({
         </div>
       ) : (
         <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white shadow-subtle overflow-hidden">
-          {visible.map((item) => {
+          {paginatedVisible.map((item) => {
             const Icon = getTypeIcon(item.type);
             return (
               <button
@@ -205,6 +214,14 @@ export function InboxClient({
           })}
         </div>
       )}
+
+      <PaginationBar
+        currentPage={safePage}
+        totalItems={visible.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+        itemLabel="notifications"
+      />
     </div>
   );
 }

@@ -43,6 +43,7 @@ import {
   EmployeeFormDialog,
   type EmployeeRow,
 } from "@/components/employees/employee-form-dialog";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 export function TeamClient({
   employees,
@@ -103,6 +104,15 @@ export function TeamClient({
       return true;
     });
   }, [employees, search, deptFilter, roleFilter, statusFilter]);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedEmployees = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   const handleApproveUser = async (emp: EmployeeRow) => {
     const chosenRole = pendingRoleMap[emp.id] || emp.role || "EMPLOYEE";
@@ -425,7 +435,7 @@ export function TeamClient({
                   </td>
                 </tr>
               ) : (
-                filtered.map((emp) => {
+                paginatedEmployees.map((emp) => {
                   const pct =
                     emp.stats.totalTasks > 0
                       ? Math.round(
@@ -585,6 +595,14 @@ export function TeamClient({
           </table>
         </div>
       </div>
+
+      <PaginationBar
+        currentPage={safePage}
+        totalItems={filtered.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+        itemLabel="employees"
+      />
 
       {isAdmin && (
         <EmployeeFormDialog

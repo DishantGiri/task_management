@@ -24,6 +24,7 @@ import {
   isTaskOverdue,
 } from "@/lib/utils";
 import { PriorityBadge } from "@/components/shared/badges";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -464,38 +465,14 @@ export function TaskListView({
       </div>
 
       {/* Pagination Bar */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-[#EAECF0] px-4 py-2.5 text-xs text-[#737987]">
-          <span>
-            Showing {(currentPage - 1) * PAGE_SIZE + 1}–
-            {Math.min(currentPage * PAGE_SIZE, tasks.length)} of {tasks.length}{" "}
-            tasks
-          </span>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              disabled={currentPage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            <span className="px-2 font-medium text-[#20232B]">
-              Page {currentPage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              disabled={currentPage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <PaginationBar
+        currentPage={currentPage}
+        totalItems={tasks.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+        itemLabel="tasks"
+        className="rounded-none border-0 border-t border-[#EAECF0]"
+      />
     </div>
   );
 }
