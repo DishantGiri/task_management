@@ -122,7 +122,7 @@ export const taskCreateSchema = z
     parentId: z.string().nullable().optional(),
     status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]).default("TODO"),
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
-    assigneeId: z.string().nullable().optional(),
+    assigneeId: z.string().min(1, "Please select an assignee"),
     collaboratorIds: z.array(z.string()).default([]),
     tagIds: z.array(z.string()).default([]),
     dependencyIds: z.array(z.string()).default([]),

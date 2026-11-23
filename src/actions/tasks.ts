@@ -259,6 +259,10 @@ export async function updateTaskAction(values: unknown) {
 
     // Employees without fullEdit can update status (and description/title on their own subtasks)
     if (data.status !== undefined) {
+      const effectiveAssigneeId =
+        perm.fullEdit && data.assigneeId !== undefined
+          ? data.assigneeId
+          : existing.assigneeId;
       const incompleteSubtasks = existing.subtasks.filter(
         (s) => s.status !== "DONE"
       ).length;
@@ -269,6 +273,7 @@ export async function updateTaskAction(values: unknown) {
         totalSubtasks: existing._count.subtasks,
         incompleteSubtasks,
         canMarkComplete: canUserMarkTaskComplete(user),
+        hasAssignee: Boolean(effectiveAssigneeId),
       });
       if (transitionError) {
         return { error: transitionError };

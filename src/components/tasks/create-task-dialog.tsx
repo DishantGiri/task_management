@@ -195,7 +195,7 @@ export function CreateTaskDialog({
   const onSubmit = async (values: TaskCreateForm) => {
     const result = await createTaskAction({
       ...values,
-      assigneeId: values.assigneeId || null,
+      assigneeId: values.assigneeId,
       startDate: values.startDate || null,
       dueDate: values.dueDate || null,
       parentId: parentId || null,
@@ -295,18 +295,19 @@ export function CreateTaskDialog({
             )}
 
             <div className="space-y-1.5">
-              <Label>Assignee</Label>
+              <Label>
+                Assignee <span className="text-red-500">*</span>
+              </Label>
               <Select
-                value={assigneeId || "__unassigned__"}
+                value={assigneeId || ""}
                 onValueChange={(v) =>
-                  setValue("assigneeId", v === "__unassigned__" ? "" : v)
+                  setValue("assigneeId", v, { shouldValidate: true })
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Unassigned" />
+                  <SelectValue placeholder="Select assignee" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
                   {users.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.name}
@@ -314,6 +315,11 @@ export function CreateTaskDialog({
                   ))}
                 </SelectContent>
               </Select>
+              {errors.assigneeId && (
+                <p className="text-[11px] text-red-600">
+                  {errors.assigneeId.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">

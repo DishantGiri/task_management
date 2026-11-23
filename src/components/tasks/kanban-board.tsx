@@ -419,6 +419,7 @@ export function KanbanBoard({
         totalSubtasks: currentTask.subtasks.length,
         incompleteSubtasks,
         canMarkComplete: true, // Server action also enforces QA/Manager/Admin role check
+        hasAssignee: Boolean(currentTask.assignee),
       });
       if (transitionError) {
         onTasksChange(snapshotRef.current);

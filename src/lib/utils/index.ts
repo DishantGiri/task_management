@@ -127,6 +127,7 @@ export function validateTaskStatusTransition(params: {
   totalSubtasks: number;
   incompleteSubtasks: number;
   canMarkComplete: boolean;
+  hasAssignee?: boolean;
 }): string | null {
   const {
     currentStatus,
@@ -135,9 +136,15 @@ export function validateTaskStatusTransition(params: {
     totalSubtasks,
     incompleteSubtasks,
     canMarkComplete,
+    hasAssignee = true,
   } = params;
 
   if (currentStatus === nextStatus) return null;
+
+  // 0. Cannot move a task out of To Do while it is unassigned
+  if (hasAssignee === false && currentStatus === "TODO" && nextStatus !== "TODO") {
+    return "Please assign this task before changing its status.";
+  }
 
   // 1. Cannot jump directly from To Do to Done without starting work first
   if (currentStatus === "TODO" && nextStatus === "DONE") {

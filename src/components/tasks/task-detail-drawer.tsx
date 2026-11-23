@@ -307,6 +307,7 @@ export function TaskDetailDrawer({
         totalSubtasks: task.subtasks.length,
         incompleteSubtasks,
         canMarkComplete,
+        hasAssignee: Boolean(draftAssigneeId),
       });
       if (transitionError) {
         toast.error(transitionError);
@@ -414,6 +415,7 @@ export function TaskDetailDrawer({
         totalSubtasks: 0,
         incompleteSubtasks: 0,
         canMarkComplete: true,
+        hasAssignee: Boolean(sub.assignee),
       });
       if (transitionError) {
         toast.error(transitionError);
@@ -441,6 +443,10 @@ export function TaskDetailDrawer({
       toast.error("Subtask title must be 200 characters or fewer.");
       return;
     }
+    if (!subAssigneeId) {
+      toast.error("Please select an assignee for this subtask.");
+      return;
+    }
     setAddingSubtask(true);
     const res = await createTaskAction({
       title: trimmedTitle,
@@ -448,7 +454,7 @@ export function TaskDetailDrawer({
       parentId: task.id,
       status: "TODO",
       priority: subPriority,
-      assigneeId: subAssigneeId || null,
+      assigneeId: subAssigneeId,
       dueDate: subDueDate || null,
       collaboratorIds: [],
       tagIds: [],
@@ -1187,18 +1193,13 @@ export function TaskDetailDrawer({
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <Select
-                            value={subAssigneeId || "__unassigned__"}
-                            onValueChange={(v) =>
-                              setSubAssigneeId(v === "__unassigned__" ? "" : v)
-                            }
+                            value={subAssigneeId}
+                            onValueChange={setSubAssigneeId}
                           >
                             <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Assignee" />
+                              <SelectValue placeholder="Assignee *" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="__unassigned__">
-                                Unassigned
-                              </SelectItem>
                               {users.map((u) => (
                                 <SelectItem key={u.id} value={u.id}>
                                   {u.name}
