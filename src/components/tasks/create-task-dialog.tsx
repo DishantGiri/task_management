@@ -26,6 +26,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
+import {
+  BlockerPicker,
+  type BlockerCandidate,
+} from "@/components/tasks/blocker-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -49,7 +53,7 @@ interface CreateTaskDialogProps {
   defaultStatus?: TaskStatus;
   parentId?: string | null;
   parentTitle?: string | null;
-  availableDependencies?: { id: string; taskKey: string; title: string }[];
+  availableDependencies?: BlockerCandidate[];
   onCreated?: (newTask?: TaskListItem) => void;
 }
 
@@ -569,29 +573,17 @@ export function CreateTaskDialog({
             </div>
           )}
 
-          {!parentId && availableDependencies.length > 0 && (
+          {projectId && availableDependencies.length > 0 && (
             <div className="space-y-1.5">
               <Label>Blocked By (Dependencies)</Label>
-              <div className="flex flex-wrap gap-1.5 rounded-md border border-[#EAECF0] bg-[#F7F8FA] p-2 max-h-24 overflow-y-auto">
-                {availableDependencies.map((dep) => {
-                  const active = selectedDeps.includes(dep.id);
-                  return (
-                    <button
-                      key={dep.id}
-                      type="button"
-                      onClick={() =>
-                        toggleItem(dep.id, selectedDeps, setSelectedDeps)
-                      }
-                      className={`rounded-[5px] border px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                        active
-                          ? "border-[#635BDB] bg-[#F0EFFF] text-[#5148C9]"
-                          : "border-[#EAECF0] bg-white text-[#4B5563] hover:border-[#D1D5DB]"
-                      }`}
-                    >
-                      {dep.taskKey}: {dep.title.slice(0, 28)}
-                    </button>
-                  );
-                })}
+              <div className="rounded-md border border-[#EAECF0] bg-[#F7F8FA] p-2">
+                <BlockerPicker
+                  projectId={projectId}
+                  excludeParentId={parentId}
+                  candidates={availableDependencies}
+                  selectedIds={selectedDeps}
+                  onToggle={(id) => toggleItem(id, selectedDeps, setSelectedDeps)}
+                />
               </div>
             </div>
           )}

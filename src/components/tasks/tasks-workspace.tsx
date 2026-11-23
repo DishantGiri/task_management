@@ -417,11 +417,24 @@ export function TasksWorkspace({
         currentUserRole={currentUserRole}
         users={users}
         tags={tags}
-        allProjectTasks={tasks.map((t) => ({
-          id: t.id,
-          taskKey: t.taskKey,
-          title: t.title,
-        }))}
+        allProjectTasks={tasks.flatMap((t) => [
+          {
+            id: t.id,
+            taskKey: t.taskKey,
+            title: t.title,
+            projectId: t.projectId,
+            status: t.status,
+            isSubtask: false,
+          },
+          ...t.subtasks.map((s) => ({
+            id: s.id,
+            taskKey: s.taskKey,
+            title: s.title,
+            projectId: t.projectId,
+            status: s.status,
+            isSubtask: true,
+          })),
+        ])}
       />
 
       {/* Create Task Dialog */}
@@ -434,11 +447,24 @@ export function TasksWorkspace({
           tags={tags}
           defaultProjectId={fixedProjectId || projects[0]?.id}
           defaultStatus={quickStatus}
-          availableDependencies={tasks.map((t) => ({
-            id: t.id,
-            taskKey: t.taskKey,
-            title: t.title,
-          }))}
+          availableDependencies={tasks.flatMap((t) => [
+            {
+              id: t.id,
+              taskKey: t.taskKey,
+              title: t.title,
+              projectId: t.projectId,
+              status: t.status,
+              isSubtask: false,
+            },
+            ...t.subtasks.map((s) => ({
+              id: s.id,
+              taskKey: s.taskKey,
+              title: s.title,
+              projectId: t.projectId,
+              status: s.status,
+              isSubtask: true,
+            })),
+          ])}
           onCreated={(newTask) => {
             if (newTask) {
               setTasks((prev) => [newTask, ...prev]);

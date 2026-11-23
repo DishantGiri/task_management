@@ -51,6 +51,10 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
+import {
+  BlockerPicker,
+  type BlockerCandidate,
+} from "@/components/tasks/blocker-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -80,7 +84,7 @@ interface TaskDetailDrawerProps {
   currentUserRole: Role;
   users: UserSummary[];
   tags: TagSummary[];
-  allProjectTasks?: { id: string; taskKey: string; title: string }[];
+  allProjectTasks?: BlockerCandidate[];
   onUpdated?: () => void;
 }
 
@@ -1038,42 +1042,22 @@ export function TaskDetailDrawer({
                     </div>
                   </div>
 
-                  {/* Dependencies */}
-                  {allProjectTasks.length > 1 && (
-                    <div className="flex flex-wrap items-start gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#737987] w-28 pt-1">
-                        <Link2 className="h-3.5 w-3.5" /> Blocked by
-                      </span>
-                      <div className="flex flex-wrap items-center gap-1.5 flex-1">
-                        {allProjectTasks
-                          .filter((t) => t.id !== task.id)
-                          .slice(0, 12)
-                          .map((dep) => {
-                            const active = draftDependencyIds.includes(dep.id);
-                            if (!canFullEdit && !active) return null;
-                            return (
-                              <button
-                                key={dep.id}
-                                type="button"
-                                disabled={!canFullEdit}
-                                onClick={() => toggleDependency(dep.id)}
-                                className={cn(
-                                  "rounded-[5px] border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                                  active
-                                    ? "border-amber-300 bg-amber-50 text-amber-800"
-                                    : "border-[#EAECF0] bg-white text-[#737987] hover:bg-[#F7F8FA]"
-                                )}
-                              >
-                                {dep.taskKey}
-                              </button>
-                            );
-                          })}
-                        {!canFullEdit && draftDependencyIds.length === 0 && (
-                          <span className="text-xs text-[#9CA3AF]">None</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* Dependencies (same project, open tasks & subtasks only, searchable) */}
+                  <div className="flex flex-wrap items-start gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#737987] w-28 pt-1">
+                      <Link2 className="h-3.5 w-3.5" /> Blocked by
+                    </span>
+                    <BlockerPicker
+                      projectId={task.projectId}
+                      excludeTaskId={task.id}
+                      excludeParentId={task.parentId}
+                      candidates={allProjectTasks}
+                      selectedIds={draftDependencyIds}
+                      onToggle={toggleDependency}
+                      disabled={!canFullEdit}
+                      existingDependencies={task.dependencies}
+                    />
+                  </div>
                 </div>
 
                 {/* Description */}
