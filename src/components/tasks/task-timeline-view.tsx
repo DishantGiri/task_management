@@ -12,17 +12,35 @@ import {
 } from "date-fns";
 import { Link2 } from "lucide-react";
 import type { TaskListItem } from "@/types";
-import { cn, getDisplayTaskProgress, STATUS_CONFIG } from "@/lib/utils";
+import {
+  cn,
+  getDisplayTaskProgress,
+  isTaskOverdue,
+  STATUS_CONFIG,
+} from "@/lib/utils";
 import { UserAvatar } from "@/components/ui/avatar";
+
+export interface TimelineMilestone {
+  id: string;
+  title: string;
+  status: "UPCOMING" | "IN_PROGRESS" | "COMPLETED";
+  dueDate: string | null;
+  projectId: string;
+  projectName?: string;
+  projectColor?: string;
+  progress?: number;
+}
 
 export function TaskTimelineView({
   tasks,
+  milestones = [],
   onSelectTask,
 }: {
   tasks: TaskListItem[];
+  milestones?: TimelineMilestone[];
   onSelectTask: (id: string) => void;
 }) {
-  const { timelineStart, days, rows } = useMemo(() => {
+  const { timelineStart, days, rows, milestoneRows } = useMemo(() => {
     const today = startOfDay(new Date());
     let minDate = subDays(today, 5);
     let maxDate = addDays(today, 21);
@@ -44,9 +62,19 @@ export function TaskTimelineView({
       return { task: t, start, end: safeEnd };
     });
 
-    // Clamp total span to a crisp readable 45-day window max
+    const parsedMilestones = milestones
+      .filter((m) => Boolean(m.dueDate))
+      .map((m) => {
+        const targetDate = startOfDay(new Date(m.dueDate!));
+        if (targetDate < minDate) minDate = subDays(targetDate, 2);
+        if (targetDate > maxDate) maxDate = addDays(targetDate, 4);
+        return { milestone: m, date: targetDate };
+      })
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Clamp total span to a crisp readable 60-day window max
     const totalDays = Math.min(
-      45,
+      60,
       Math.max(21, differenceInCalendarDays(maxDate, minDate) + 1)
     );
     const intervalDays = eachDayOfInterval({
@@ -58,21 +86,22 @@ export function TaskTimelineView({
       timelineStart: minDate,
       days: intervalDays,
       rows: parsedRows,
+      milestoneRows: parsedMilestones,
     };
-  }, [tasks]);
+  }, [tasks, milestones]);
 
   const DAY_WIDTH = 38;
   const totalWidth = days.length * DAY_WIDTH;
 
-  if (tasks.length === 0) {
+  if (tasks.length === 0 && milestoneRows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-[#D9DEE7] bg-white py-14 text-center">
         <p className="text-sm font-medium text-[#20232B]">
-          No scheduled tasks for timeline
+          No scheduled tasks or milestones for timeline
         </p>
         <p className="mt-1 text-xs text-[#737987]">
-          Add start and due dates to tasks to visualize project timelines and
-          dependencies.
+          Add start/due dates to tasks or target dates to milestones to
+          visualize project timelines.
         </p>
       </div>
     );
@@ -81,12 +110,55 @@ export function TaskTimelineView({
   return (
     <div className="rounded-lg border border-[#EAECF0] bg-white shadow-subtle overflow-hidden">
       <div className="flex overflow-x-auto">
-        {/* Left Sticky Task Column */}
+        {/* Left Sticky Task & Milestone Column */}
         <div className="w-[270px] shrink-0 border-r border-[#EAECF0] bg-white sticky left-0 z-10">
           <div className="h-11 flex items-center px-4 border-b border-[#EAECF0] bg-[#F7F8FA] text-[11px] font-semibold uppercase tracking-wider text-[#737987]">
-            Task &amp; Dependencies
+            Milestones &amp; Tasks
           </div>
           <div className="divide-y divide-[#EAECF0]">
+            {/* Milestone Labels */}
+            {milestoneRows.map(({ milestone, date }) => {
+              const overdue =
+                milestone.status !== "COMPLETED" &&
+                isTaskOverdue(milestone.dueDate, "TODO");
+              const diamondColor =
+                milestone.status === "COMPLETED"
+                  ? "bg-[#16A34A]"
+                  : overdue
+                  ? "bg-[#EF4444]"
+                  : "bg-[#635BDB]";
+
+              return (
+                <div
+                  key={`ms-label-${milestone.id}`}
+                  className="flex h-11 w-full items-center gap-2.5 bg-[#FBFBFF] px-4 text-left"
+                >
+                  <span
+                    className={cn(
+                      "h-2.5 w-2.5 shrink-0 rotate-45 rounded-[1.5px]",
+                      diamondColor
+                    )}
+                    title="Milestone"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded bg-[#F0EFFF] px-1 py-0.2 text-[9.5px] font-semibold uppercase tracking-wide text-[#5148C9] shrink-0">
+                        Milestone
+                      </span>
+                      <span className="truncate text-xs font-semibold text-[#20232B]">
+                        {milestone.title}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#737987] truncate">
+                      {format(date, "MMM d, yyyy")}
+                      {milestone.projectName ? ` · ${milestone.projectName}` : ""}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Task Labels */}
             {rows.map(({ task }) => (
               <button
                 key={task.id}
@@ -150,7 +222,9 @@ export function TaskTimelineView({
                   )}
                 >
                   <span className="text-[9px] uppercase">
-                    {isFirstOfMonth ? format(day, "MMM") : format(day, "EEE").slice(0, 2)}
+                    {isFirstOfMonth
+                      ? format(day, "MMM")
+                      : format(day, "EEE").slice(0, 2)}
                   </span>
                   <span>{format(day, "d")}</span>
                 </div>
@@ -160,6 +234,102 @@ export function TaskTimelineView({
 
           {/* Gantt Rows */}
           <div className="divide-y divide-[#EAECF0] relative">
+            {/* Vertical dashed milestone guide lines across entire chart */}
+            {milestoneRows.map(({ milestone, date }) => {
+              const offsetDays = differenceInCalendarDays(date, timelineStart);
+              if (offsetDays < 0 || offsetDays >= days.length) return null;
+              const centerX = offsetDays * DAY_WIDTH + DAY_WIDTH / 2;
+              const overdue =
+                milestone.status !== "COMPLETED" &&
+                isTaskOverdue(milestone.dueDate, "TODO");
+              const lineColor =
+                milestone.status === "COMPLETED"
+                  ? "border-emerald-300/80"
+                  : overdue
+                  ? "border-red-300/80"
+                  : "border-[#635BDB]/35";
+              return (
+                <div
+                  key={`ms-guide-${milestone.id}`}
+                  style={{ left: centerX }}
+                  className={cn(
+                    "pointer-events-none absolute top-0 bottom-0 z-[1] border-l border-dashed",
+                    lineColor
+                  )}
+                />
+              );
+            })}
+
+            {/* Diamond Milestone Rows */}
+            {milestoneRows.map(({ milestone, date }) => {
+              const offsetDays = Math.max(
+                0,
+                Math.min(
+                  days.length - 1,
+                  differenceInCalendarDays(date, timelineStart)
+                )
+              );
+              const centerX = offsetDays * DAY_WIDTH + DAY_WIDTH / 2;
+              const overdue =
+                milestone.status !== "COMPLETED" &&
+                isTaskOverdue(milestone.dueDate, "TODO");
+              const diamondStyles =
+                milestone.status === "COMPLETED"
+                  ? "bg-[#16A34A] border-emerald-700 ring-2 ring-emerald-200"
+                  : overdue
+                  ? "bg-[#EF4444] border-red-700 ring-2 ring-red-200"
+                  : "bg-[#635BDB] border-[#4338CA] ring-2 ring-[#E0DEFF]";
+
+              return (
+                <div
+                  key={`ms-row-${milestone.id}`}
+                  className="relative h-11 flex items-center bg-[#FBFBFF]"
+                >
+                  {/* Day vertical guidelines */}
+                  <div className="absolute inset-0 flex pointer-events-none">
+                    {days.map((day) => (
+                      <div
+                        key={day.toISOString()}
+                        style={{ width: DAY_WIDTH }}
+                        className={cn(
+                          "h-full border-r border-[#F1F3F7]",
+                          isToday(day) && "bg-[#F0EFFF]/45"
+                        )}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Diamond Marker + Inline Label */}
+                  <div
+                    style={{ left: centerX - 8 }}
+                    className="absolute z-[2] flex items-center gap-2.5"
+                    title={`Milestone: ${milestone.title} · Target: ${format(
+                      date,
+                      "MMM d, yyyy"
+                    )}${
+                      milestone.progress !== undefined
+                        ? ` · ${milestone.progress}% complete`
+                        : ""
+                    }`}
+                  >
+                    <div
+                      className={cn(
+                        "h-4 w-4 shrink-0 rotate-45 rounded-[2px] border shadow-sm",
+                        diamondStyles
+                      )}
+                    />
+                    <span className="whitespace-nowrap rounded-md border border-[#E4E2FF] bg-white/95 px-2 py-0.5 text-[11px] font-semibold text-[#20232B] shadow-subtle">
+                      {milestone.title}
+                      <span className="ml-1.5 font-normal text-[#737987]">
+                        {format(date, "MMM d")}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Task Bars */}
             {rows.map(({ task, start, end }) => {
               const offsetDays = Math.max(
                 0,
@@ -208,8 +378,11 @@ export function TaskTimelineView({
                       width: widthPx,
                       borderColor: statusColor,
                     }}
-                    className="absolute h-7 rounded-[5px] border bg-white shadow-subtle overflow-hidden text-left group hover:shadow-card transition-shadow"
-                    title={`${task.taskKey}: ${task.title} (${format(start, "MMM d")} – ${format(end, "MMM d")})`}
+                    className="absolute z-[2] h-7 rounded-[5px] border bg-white shadow-subtle overflow-hidden text-left group hover:shadow-card transition-shadow"
+                    title={`${task.taskKey}: ${task.title} (${format(
+                      start,
+                      "MMM d"
+                    )} – ${format(end, "MMM d")})`}
                   >
                     <div
                       className="absolute inset-y-0 left-0 opacity-20"
@@ -233,6 +406,24 @@ export function TaskTimelineView({
           </div>
         </div>
       </div>
+
+      {/* Legend */}
+      {milestoneRows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-4 border-t border-[#EAECF0] bg-[#FAFBFC] px-4 py-2 text-[11px] text-[#737987]">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rotate-45 rounded-[1px] bg-[#635BDB]" />
+            Upcoming / In Progress Milestone
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rotate-45 rounded-[1px] bg-[#16A34A]" />
+            Completed Milestone
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rotate-45 rounded-[1px] bg-[#EF4444]" />
+            Overdue Milestone
+          </span>
+        </div>
+      )}
     </div>
   );
 }

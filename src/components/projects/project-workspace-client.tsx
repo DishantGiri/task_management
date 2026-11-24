@@ -342,6 +342,16 @@ export function ProjectWorkspaceClient({
           <Suspense fallback={<Skeleton className="h-[460px] w-full" />}>
             <TasksWorkspace
               initialTasks={tasks}
+              milestones={milestones.map((m) => ({
+                id: m.id,
+                title: m.title,
+                status: m.status,
+                dueDate: m.dueDate,
+                projectId: m.projectId,
+                projectName: project.name,
+                projectColor: project.color,
+                progress: m.taskStats.progress,
+              }))}
               projects={[
                 {
                   id: project.id,

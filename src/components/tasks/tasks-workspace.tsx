@@ -31,7 +31,10 @@ import {
 import { KanbanBoard } from "@/components/tasks/kanban-board";
 import { TaskListView } from "@/components/tasks/task-list-view";
 import { TaskCalendarView } from "@/components/tasks/task-calendar-view";
-import { TaskTimelineView } from "@/components/tasks/task-timeline-view";
+import {
+  TaskTimelineView,
+  type TimelineMilestone,
+} from "@/components/tasks/task-timeline-view";
 import { TaskDetailDrawer } from "@/components/tasks/task-detail-drawer";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 
@@ -47,6 +50,7 @@ const PRIORITY_WEIGHT: Record<Priority, number> = {
 
 interface TasksWorkspaceProps {
   initialTasks: TaskListItem[];
+  milestones?: TimelineMilestone[];
   projects: ProjectSummary[];
   users: UserSummary[];
   tags: TagSummary[];
@@ -60,6 +64,7 @@ interface TasksWorkspaceProps {
 
 export function TasksWorkspace({
   initialTasks,
+  milestones = [],
   projects,
   users,
   tags,
@@ -405,6 +410,11 @@ export function TasksWorkspace({
       {view === "timeline" && (
         <TaskTimelineView
           tasks={filteredTasks}
+          milestones={
+            projectFilter === "ALL"
+              ? milestones
+              : milestones.filter((m) => m.projectId === projectFilter)
+          }
           onSelectTask={handleOpenTask}
         />
       )}
