@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleProjectIds, getCurrentUser } from "@/lib/permissions";
 import { createTaskAction } from "@/actions/tasks";
+import { withCache } from "@/lib/cache/redis";
 import type { Prisma, Priority, TaskStatus } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -45,53 +46,113 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  const [total, tasks] = await Promise.all([
-    prisma.task.count({ where }),
-    prisma.task.findMany({
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      orderBy: [{ position: "asc" }, { createdAt: "desc" }],
-      include: {
-        project: { select: { id: true, code: true, name: true, color: true } },
-        assignee: {
-          select: { id: true, name: true, email: true, avatarUrl: true, designation: true, role: true },
-        },
-        collaborators: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, avatarUrl: true, designation: true, role: true },
-            },
-          },
-        },
-        tags: { include: { tag: true } },
-        subtasks: {
-          orderBy: { position: "asc" },
-          include: {
-            assignee: {
-              select: { id: true, name: true, email: true, avatarUrl: true, designation: true, role: true },
-            },
-          },
-        },
-        dependencies: {
-          include: {
-            dependsOn: { select: { id: true, taskKey: true, title: true, status: true } },
-          },
-        },
-        _count: { select: { subtasks: true, comments: true, attachments: true } },
-      },
-    }),
-  ]);
+  const cacheKey = `meridian:api:tasks:${user.id}:${projectId || "all"}:${
+    status || "all"
+  }:${priority || "all"}:${assigneeId || "all"}:${search || ""}:${page}:${limit}`;
 
-  return NextResponse.json({
-    data: tasks,
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    },
+  const payload = await withCache(cacheKey, 15, async () => {
+    const [total, tasks] = await Promise.all([
+      prisma.task.count({ where }),
+      prisma.task.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ position: "asc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          taskKey: true,
+          title: true,
+          status: true,
+          priority: true,
+          position: true,
+          progress: true,
+          startDate: true,
+          dueDate: true,
+          completedAt: true,
+          projectId: true,
+          assigneeId: true,
+          creatorId: true,
+          parentId: true,
+          createdAt: true,
+          updatedAt: true,
+          project: { select: { id: true, code: true, name: true, color: true } },
+          assignee: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              avatarUrl: true,
+              designation: true,
+              role: true,
+            },
+          },
+          collaborators: {
+            select: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatarUrl: true,
+                  designation: true,
+                  role: true,
+                },
+              },
+            },
+          },
+          tags: {
+            select: { tag: { select: { id: true, name: true, color: true } } },
+          },
+          subtasks: {
+            orderBy: { position: "asc" },
+            select: {
+              id: true,
+              taskKey: true,
+              title: true,
+              status: true,
+              priority: true,
+              progress: true,
+              startDate: true,
+              dueDate: true,
+              assignee: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatarUrl: true,
+                  designation: true,
+                  role: true,
+                },
+              },
+            },
+          },
+          dependencies: {
+            select: {
+              dependsOnId: true,
+              dependsOn: {
+                select: { id: true, taskKey: true, title: true, status: true },
+              },
+            },
+          },
+          _count: {
+            select: { subtasks: true, comments: true, attachments: true },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: tasks,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
   });
+
+  return NextResponse.json(payload);
 }
 
 export async function POST(request: NextRequest) {

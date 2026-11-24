@@ -34,27 +34,53 @@ interface InboxNotification {
 
 export function InboxClient({
   initialNotifications,
+  currentPage = 1,
+  pageSize = 12,
+  totalFilteredCount,
+  totalAllCount,
+  initialUnreadCount,
+  initialFilter = "all",
 }: {
   initialNotifications: InboxNotification[];
+  currentPage?: number;
+  pageSize?: number;
+  totalFilteredCount?: number;
+  totalAllCount?: number;
+  initialUnreadCount?: number;
+  initialFilter?: "all" | "unread";
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initialNotifications);
-  const [filter, setFilter] = useState<"all" | "unread">("all");
-  const [page, setPage] = useState(1);
-  const PAGE_SIZE = 12;
-
-  const unreadCount = items.filter((n) => !n.isRead).length;
-  const visible = filter === "unread" ? items.filter((n) => !n.isRead) : items;
-  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const paginatedVisible = visible.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
+  const [unreadCount, setUnreadCount] = useState(
+    initialUnreadCount ?? initialNotifications.filter((n) => !n.isRead).length
   );
+
+  // Keep synced when server-side pagination loads a new page
+  const [prevInitial, setPrevInitial] = useState(initialNotifications);
+  if (initialNotifications !== prevInitial) {
+    setPrevInitial(initialNotifications);
+    setItems(initialNotifications);
+    if (initialUnreadCount !== undefined) {
+      setUnreadCount(initialUnreadCount);
+    }
+  }
+
+  const filter = initialFilter;
+  const allCount = totalAllCount ?? items.length;
+  const totalForPagination = totalFilteredCount ?? items.length;
+
+  const navigateInbox = (nextPage: number, nextFilter: "all" | "unread") => {
+    const sp = new URLSearchParams();
+    if (nextFilter === "unread") sp.set("filter", "unread");
+    if (nextPage > 1) sp.set("page", String(nextPage));
+    const qs = sp.toString();
+    router.push(qs ? `/inbox?${qs}` : "/inbox");
+  };
 
   const handleOpen = async (item: InboxNotification) => {
     if (!item.isRead) {
       const nextUnread = Math.max(0, unreadCount - 1);
+      setUnreadCount(nextUnread);
       setItems((prev) =>
         prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
       );
@@ -71,6 +97,7 @@ export function InboxClient({
   };
 
   const handleMarkAll = async () => {
+    setUnreadCount(0);
     setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
     window.dispatchEvent(
       new CustomEvent("meridian:notifications-updated", {
@@ -120,7 +147,7 @@ export function InboxClient({
           <div className="inline-flex rounded-md border border-[#EAECF0] bg-white p-0.5">
             <button
               type="button"
-              onClick={() => setFilter("all")}
+              onClick={() => navigateInbox(1, "all")}
               className={cn(
                 "rounded-[4px] px-3 py-1 text-xs font-medium",
                 filter === "all"
@@ -128,11 +155,11 @@ export function InboxClient({
                   : "text-[#737987] hover:text-[#20232B]"
               )}
             >
-              All ({items.length})
+              All ({allCount})
             </button>
             <button
               type="button"
-              onClick={() => setFilter("unread")}
+              onClick={() => navigateInbox(1, "unread")}
               className={cn(
                 "rounded-[4px] px-3 py-1 text-xs font-medium",
                 filter === "unread"
@@ -153,7 +180,7 @@ export function InboxClient({
         </div>
       </div>
 
-      {visible.length === 0 ? (
+      {items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[#D9DEE7] bg-white py-16 text-center">
           <Bell className="mx-auto h-6 w-6 text-[#9CA3AF] mb-2" />
           <p className="text-sm font-medium text-[#20232B]">Inbox is clear</p>
@@ -165,7 +192,7 @@ export function InboxClient({
         </div>
       ) : (
         <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white shadow-subtle overflow-hidden">
-          {paginatedVisible.map((item) => {
+          {items.map((item) => {
             const Icon = getTypeIcon(item.type);
             return (
               <button
@@ -216,10 +243,10 @@ export function InboxClient({
       )}
 
       <PaginationBar
-        currentPage={safePage}
-        totalItems={visible.length}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
+        currentPage={currentPage}
+        totalItems={totalForPagination}
+        pageSize={pageSize}
+        onPageChange={(nextPage) => navigateInbox(nextPage, filter)}
         itemLabel="notifications"
       />
     </div>

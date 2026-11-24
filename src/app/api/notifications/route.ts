@@ -5,25 +5,48 @@ import {
   syncUpcomingDeadlineNotifications,
 } from "@/lib/permissions";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await syncUpcomingDeadlineNotifications(user.id);
+  // Non-blocking background sync so API responds immediately
+  void syncUpcomingDeadlineNotifications(user.id).catch(() => {});
 
-  const [notifications, unreadCount] = await Promise.all([
+  const { searchParams } = new URL(request.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+  const limit = Math.min(
+    50,
+    Math.max(1, parseInt(searchParams.get("limit") || "20", 10))
+  );
+  const filter = searchParams.get("filter") === "unread" ? "unread" : "all";
+
+  const listWhere =
+    filter === "unread"
+      ? { userId: user.id, isRead: false }
+      : { userId: user.id };
+
+  const [notifications, total, unreadCount] = await Promise.all([
     prisma.notification.findMany({
-      where: { userId: user.id },
+      where: listWhere,
       orderBy: { createdAt: "desc" },
-      take: 30,
-      include: {
+      skip: (page - 1) * limit,
+      take: limit,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        message: true,
+        link: true,
+        isRead: true,
+        createdAt: true,
         actor: {
           select: { id: true, name: true, avatarUrl: true },
         },
       },
     }),
+    prisma.notification.count({ where: listWhere }),
     prisma.notification.count({
       where: { userId: user.id, isRead: false },
     }),
@@ -32,6 +55,12 @@ export async function GET() {
   return NextResponse.json({
     data: notifications,
     unreadCount,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    },
   });
 }
 

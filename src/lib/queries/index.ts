@@ -151,18 +151,45 @@ export async function getTasksList(
     const tasks = await prisma.task.findMany({
       where,
       orderBy: [{ position: "asc" }, { createdAt: "desc" }],
-      include: {
+      select: {
+        id: true,
+        taskKey: true,
+        title: true,
+        status: true,
+        priority: true,
+        position: true,
+        progress: true,
+        startDate: true,
+        dueDate: true,
+        completedAt: true,
+        projectId: true,
+        assigneeId: true,
+        creatorId: true,
+        parentId: true,
+        createdAt: true,
+        updatedAt: true,
         project: { select: { id: true, code: true, name: true, color: true } },
         assignee: { select: userSelect },
         collaborators: {
-          include: { user: { select: userSelect } },
+          select: { user: { select: userSelect } },
         },
         tags: {
-          include: { tag: { select: { id: true, name: true, color: true } } },
+          select: { tag: { select: { id: true, name: true, color: true } } },
         },
         subtasks: {
           orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-          include: {
+          select: {
+            id: true,
+            taskKey: true,
+            title: true,
+            status: true,
+            priority: true,
+            progress: true,
+            projectId: true,
+            parentId: true,
+            assigneeId: true,
+            startDate: true,
+            dueDate: true,
             assignee: { select: userSelect },
             _count: {
               select: { subtasks: true, comments: true, attachments: true },
@@ -170,7 +197,9 @@ export async function getTasksList(
           },
         },
         dependencies: {
-          include: {
+          select: {
+            id: true,
+            dependsOnId: true,
             dependsOn: {
               select: { id: true, taskKey: true, title: true, status: true },
             },
@@ -182,6 +211,7 @@ export async function getTasksList(
 
     return tasks.map((t) => ({
       ...t,
+      description: null,
       startDate: t.startDate?.toISOString() ?? null,
       dueDate: t.dueDate?.toISOString() ?? null,
       completedAt: t.completedAt?.toISOString() ?? null,
@@ -189,6 +219,7 @@ export async function getTasksList(
       updatedAt: t.updatedAt.toISOString(),
       subtasks: t.subtasks.map((s) => ({
         ...s,
+        description: null,
         startDate: s.startDate?.toISOString() ?? null,
         dueDate: s.dueDate?.toISOString() ?? null,
       })),

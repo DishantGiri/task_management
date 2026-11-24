@@ -47,22 +47,43 @@ import { PaginationBar } from "@/components/shared/pagination-bar";
 
 export function TeamClient({
   employees,
+  pendingEmployees: serverPendingEmployees,
   departments,
   currentUserId,
   currentUserRole,
+  serverPagination,
 }: {
   employees: EmployeeRow[];
+  pendingEmployees?: EmployeeRow[];
   departments: { id: string; name: string }[];
   currentUserId: string;
   currentUserRole: Role;
+  serverPagination?: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    summary: {
+      totalUsers: number;
+      activeCount: number;
+      pendingCount: number;
+      managersCount: number;
+    };
+    filters: { q: string; dept: string; role: string; status: string };
+  };
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState(searchParams.get("q") || "");
-  const [deptFilter, setDeptFilter] = useState("ALL");
-  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [search, setSearch] = useState(
+    serverPagination?.filters.q ?? searchParams.get("q") ?? ""
+  );
+  const [deptFilter, setDeptFilter] = useState(
+    serverPagination?.filters.dept ?? "ALL"
+  );
+  const [roleFilter, setRoleFilter] = useState(
+    serverPagination?.filters.role ?? "ALL"
+  );
   const [statusFilter, setStatusFilter] = useState(
-    searchParams.get("status") || "ALL"
+    serverPagination?.filters.status ?? searchParams.get("status") ?? "ALL"
   );
 
   const [formOpen, setFormOpen] = useState(false);
@@ -81,38 +102,41 @@ export function TeamClient({
 
   const pendingEmployees = useMemo(
     () =>
+      serverPendingEmployees ??
       employees.filter(
         (e) => e.status === "PENDING" || e.status === "INVITED"
       ),
-    [employees]
+    [serverPendingEmployees, employees]
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return employees.filter((emp) => {
-      if (deptFilter !== "ALL" && (emp.departmentId || "NONE") !== deptFilter)
-        return false;
-      if (roleFilter !== "ALL" && emp.role !== roleFilter) return false;
-      if (statusFilter !== "ALL" && emp.status !== statusFilter) return false;
-      if (q) {
-        const match =
-          emp.name.toLowerCase().includes(q) ||
-          emp.email.toLowerCase().includes(q) ||
-          (emp.designation || "").toLowerCase().includes(q);
-        if (!match) return false;
-      }
-      return true;
-    });
-  }, [employees, search, deptFilter, roleFilter, statusFilter]);
+  const navigateTeam = (overrides: {
+    page?: number;
+    q?: string;
+    dept?: string;
+    role?: string;
+    status?: string;
+  }) => {
+    const nextQ = overrides.q !== undefined ? overrides.q : search;
+    const nextDept = overrides.dept !== undefined ? overrides.dept : deptFilter;
+    const nextRole = overrides.role !== undefined ? overrides.role : roleFilter;
+    const nextStatus =
+      overrides.status !== undefined ? overrides.status : statusFilter;
+    const nextPage = overrides.page ?? 1;
 
-  const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const paginatedEmployees = filtered.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
-  );
+    const sp = new URLSearchParams();
+    if (nextQ.trim()) sp.set("q", nextQ.trim());
+    if (nextDept !== "ALL") sp.set("dept", nextDept);
+    if (nextRole !== "ALL") sp.set("role", nextRole);
+    if (nextStatus !== "ALL") sp.set("status", nextStatus);
+    if (nextPage > 1) sp.set("page", String(nextPage));
+    const qs = sp.toString();
+    router.push(qs ? `/team?${qs}` : "/team");
+  };
+
+  const PAGE_SIZE = serverPagination?.pageSize ?? 10;
+  const safePage = serverPagination?.page ?? 1;
+  const totalItems = serverPagination?.totalItems ?? employees.length;
+  const paginatedEmployees = employees;
 
   const handleApproveUser = async (emp: EmployeeRow) => {
     const chosenRole = pendingRoleMap[emp.id] || emp.role || "EMPLOYEE";
@@ -154,10 +178,14 @@ export function TeamClient({
     router.refresh();
   };
 
-  const activeCount = employees.filter((e) => e.status === "ACTIVE").length;
-  const managersCount = employees.filter(
-    (e) => e.role === "ADMIN" || e.role === "MANAGER"
-  ).length;
+  const totalUsersCount =
+    serverPagination?.summary.totalUsers ?? employees.length;
+  const activeCount =
+    serverPagination?.summary.activeCount ??
+    employees.filter((e) => e.status === "ACTIVE").length;
+  const managersCount =
+    serverPagination?.summary.managersCount ??
+    employees.filter((e) => e.role === "ADMIN" || e.role === "MANAGER").length;
 
   return (
     <div className="space-y-5">
@@ -323,7 +351,7 @@ export function TeamClient({
             <Users className="h-4 w-4 text-[#635BDB]" />
           </div>
           <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
-            {employees.length}
+            {totalUsersCount}
           </p>
         </div>
         <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
@@ -363,12 +391,28 @@ export function TeamClient({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, designation..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                navigateTeam({ q: search, page: 1 });
+              }
+            }}
+            onBlur={() => {
+              if (search.trim() !== (serverPagination?.filters.q ?? "")) {
+                navigateTeam({ q: search, page: 1 });
+              }
+            }}
+            placeholder="Search by name, email, designation... (Enter)"
             className="h-8 w-full rounded-md border border-[#E2E6EE] bg-white pl-8 pr-3 text-xs focus:border-[#635BDB] focus:outline-none"
           />
         </div>
 
-        <Select value={deptFilter} onValueChange={setDeptFilter}>
+        <Select
+          value={deptFilter}
+          onValueChange={(v) => {
+            setDeptFilter(v);
+            navigateTeam({ dept: v, page: 1 });
+          }}
+        >
           <SelectTrigger className="h-8 w-[150px] text-xs">
             <SelectValue placeholder="All Departments" />
           </SelectTrigger>
@@ -382,7 +426,13 @@ export function TeamClient({
           </SelectContent>
         </Select>
 
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
+        <Select
+          value={roleFilter}
+          onValueChange={(v) => {
+            setRoleFilter(v);
+            navigateTeam({ role: v, page: 1 });
+          }}
+        >
           <SelectTrigger className="h-8 w-[130px] text-xs">
             <SelectValue placeholder="All Roles" />
           </SelectTrigger>
@@ -394,7 +444,13 @@ export function TeamClient({
           </SelectContent>
         </Select>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => {
+            setStatusFilter(v);
+            navigateTeam({ status: v, page: 1 });
+          }}
+        >
           <SelectTrigger className="h-8 w-[150px] text-xs">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
@@ -425,7 +481,7 @@ export function TeamClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EAECF0] text-[13px]">
-              {filtered.length === 0 ? (
+              {paginatedEmployees.length === 0 ? (
                 <tr>
                   <td
                     colSpan={isAdmin ? 7 : 6}
@@ -598,9 +654,9 @@ export function TeamClient({
 
       <PaginationBar
         currentPage={safePage}
-        totalItems={filtered.length}
+        totalItems={totalItems}
         pageSize={PAGE_SIZE}
-        onPageChange={setPage}
+        onPageChange={(nextPage) => navigateTeam({ page: nextPage })}
         itemLabel="employees"
       />
 
