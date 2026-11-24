@@ -11,7 +11,7 @@ import type { Priority, ProjectStatus, Role } from "@prisma/client";
 import type { ProjectListItem, UserSummary } from "@/types";
 import { projectCreateSchema } from "@/lib/validations";
 import { createProjectAction, updateProjectAction } from "@/actions/projects";
-import { cn } from "@/lib/utils";
+import { cn, getServerTodayStr } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -183,7 +183,7 @@ export function ProjectFormDialog({
   const managerId = watch("managerId");
   const startDateVal = watch("startDate");
   const endDateVal = watch("endDate");
-  const todayStr = new Date().toLocaleDateString("en-CA");
+  const todayStr = getServerTodayStr();
   const minEndDate =
     startDateVal && startDateVal > todayStr ? startDateVal : todayStr;
 

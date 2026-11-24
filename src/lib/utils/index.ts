@@ -1,6 +1,15 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { format, formatDistanceToNow, isPast, isToday, isTomorrow, startOfDay } from "date-fns";
+import {
+  addDays,
+  format,
+  formatDistance,
+  isSameDay,
+  startOfDay,
+} from "date-fns";
+import { getServerNow, getServerTodayStr } from "@/lib/utils/server-clock";
+
+export { getServerNow, getServerTodayStr };
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -27,15 +36,16 @@ export function formatCompactDate(date: Date | string | null | undefined): strin
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "—";
-  if (isToday(d)) return "Today";
-  if (isTomorrow(d)) return "Tomorrow";
+  const serverNow = getServerNow();
+  if (isSameDay(d, serverNow)) return "Today";
+  if (isSameDay(d, addDays(serverNow, 1))) return "Tomorrow";
   return format(d, "MMM d");
 }
 
 export function formatRelativeTime(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "";
-  return formatDistanceToNow(d, { addSuffix: true });
+  return formatDistance(d, getServerNow(), { addSuffix: true });
 }
 
 export function isTaskOverdue(
@@ -44,7 +54,7 @@ export function isTaskOverdue(
 ): boolean {
   if (!dueDate || status === "DONE") return false;
   const d = typeof dueDate === "string" ? new Date(dueDate) : dueDate;
-  return isPast(d) && startOfDay(d) < startOfDay(new Date());
+  return startOfDay(d) < startOfDay(getServerNow());
 }
 
 export function formatFileSize(bytes: number): string {

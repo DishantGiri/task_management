@@ -23,7 +23,7 @@ import {
   deleteMilestoneAction,
   updateMilestoneAction,
 } from "@/actions/milestones";
-import { cn, formatShortDate, isTaskOverdue } from "@/lib/utils";
+import { cn, formatShortDate, getServerTodayStr, isTaskOverdue } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -106,7 +106,7 @@ export function ProjectMilestonesTab({
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [taskSearch, setTaskSearch] = useState("");
 
-  const todayStr = new Date().toLocaleDateString("en-CA");
+  const todayStr = getServerTodayStr();
 
   const stats = useMemo(() => {
     const total = milestones.length;

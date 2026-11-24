@@ -58,6 +58,7 @@ import {
 import {
   cn,
   formatCompactDate,
+  getServerTodayStr,
   isTaskOverdue,
   STATUS_CONFIG,
 } from "@/lib/utils";
@@ -699,7 +700,7 @@ export function PersonalTasksClient({
             </Select>
 
             <DatePicker
-              minDate={new Date().toLocaleDateString("en-CA")}
+              minDate={getServerTodayStr()}
               value={quickDueDate}
               placeholder="Due date"
               onChange={setQuickDueDate}
@@ -1360,7 +1361,7 @@ export function PersonalTasksClient({
                       <Calendar className="h-3.5 w-3.5" /> Due Date
                     </span>
                     <DatePicker
-                      minDate={new Date().toLocaleDateString("en-CA")}
+                      minDate={getServerTodayStr()}
                       value={
                         selectedTask.dueDate
                           ? selectedTask.dueDate.slice(0, 10)

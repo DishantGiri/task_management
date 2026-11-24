@@ -25,7 +25,7 @@ import {
   Users,
 } from "lucide-react";
 import type { TaskListItem } from "@/types";
-import { cn, isTaskOverdue } from "@/lib/utils";
+import { cn, getServerNow, isTaskOverdue } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PriorityBadge, TaskStatusBadge } from "@/components/shared/badges";
 
@@ -150,7 +150,7 @@ export function TaskCalendarView({
   tasks: TaskListItem[];
   onSelectTask: (id: string) => void;
 }) {
-  const [cursorDate, setCursorDate] = useState(() => new Date());
+  const [cursorDate, setCursorDate] = useState(() => getServerNow());
   const [moreView, setMoreView] = useState(true);
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -163,6 +163,7 @@ export function TaskCalendarView({
   const days = useMemo<CalendarDayCell[]>(() => {
     const start = startOfWeek(startOfMonth(cursorDate), { weekStartsOn: 0 });
     const end = endOfWeek(endOfMonth(cursorDate), { weekStartsOn: 0 });
+    const serverToday = getServerNow();
 
     return eachDayOfInterval({ start, end }).map((date) => {
       const isCurrentMonth = isSameMonth(date, cursorDate);
@@ -178,7 +179,7 @@ export function TaskCalendarView({
         date,
         label: format(date, "dd"),
         isCurrentMonth,
-        isTodayDate: isToday(date),
+        isTodayDate: isSameDay(date, serverToday),
         tasks: dayTasks,
         hasOverdue,
       };
@@ -220,7 +221,7 @@ export function TaskCalendarView({
   const goToday = () => {
     setSelectedDay(null);
     setHoveredDay(null);
-    setCursorDate(new Date());
+    setCursorDate(getServerNow());
   };
 
   const handleToggleSelect = (key: string) => {

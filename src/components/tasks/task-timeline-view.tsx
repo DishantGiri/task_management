@@ -6,7 +6,7 @@ import {
   differenceInCalendarDays,
   eachDayOfInterval,
   format,
-  isToday,
+  isSameDay,
   startOfDay,
   subDays,
 } from "date-fns";
@@ -15,6 +15,7 @@ import type { TaskListItem } from "@/types";
 import {
   cn,
   getDisplayTaskProgress,
+  getServerNow,
   isTaskOverdue,
   STATUS_CONFIG,
 } from "@/lib/utils";
@@ -40,8 +41,10 @@ export function TaskTimelineView({
   milestones?: TimelineMilestone[];
   onSelectTask: (id: string) => void;
 }) {
+  const serverToday = startOfDay(getServerNow());
+
   const { timelineStart, days, rows, milestoneRows } = useMemo(() => {
-    const today = startOfDay(new Date());
+    const today = startOfDay(getServerNow());
     let minDate = subDays(today, 5);
     let maxDate = addDays(today, 21);
 
@@ -208,7 +211,7 @@ export function TaskTimelineView({
           {/* Date Header */}
           <div className="flex h-11 border-b border-[#EAECF0] bg-[#F7F8FA]">
             {days.map((day) => {
-              const today = isToday(day);
+              const today = isSameDay(day, serverToday);
               const isFirstOfMonth = day.getDate() === 1;
               return (
                 <div
@@ -293,7 +296,7 @@ export function TaskTimelineView({
                         style={{ width: DAY_WIDTH }}
                         className={cn(
                           "h-full border-r border-[#F1F3F7]",
-                          isToday(day) && "bg-[#F0EFFF]/45"
+                          isSameDay(day, serverToday) && "bg-[#F0EFFF]/45"
                         )}
                       />
                     ))}
@@ -363,7 +366,7 @@ export function TaskTimelineView({
                         style={{ width: DAY_WIDTH }}
                         className={cn(
                           "h-full border-r border-[#F1F3F7]",
-                          isToday(day) && "bg-[#F0EFFF]/45"
+                          isSameDay(day, serverToday) && "bg-[#F0EFFF]/45"
                         )}
                       />
                     ))}

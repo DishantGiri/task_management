@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { taskCreateSchema } from "@/lib/validations";
 import { createTaskAction } from "@/actions/tasks";
+import { getServerTodayStr } from "@/lib/utils";
 import type {
   ProjectSummary,
   TagSummary,
@@ -130,7 +131,7 @@ export function CreateTaskDialog({
   const assigneeId = watch("assigneeId");
   const startDate = watch("startDate");
   const dueDate = watch("dueDate");
-  const todayStr = new Date().toLocaleDateString("en-CA");
+  const todayStr = getServerTodayStr();
   const minDueDate =
     startDate && startDate > todayStr ? startDate : todayStr;
 

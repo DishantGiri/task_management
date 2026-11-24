@@ -3,7 +3,7 @@
 import * as React from "react";
 import { format, startOfDay } from "date-fns";
 import { Calendar as CalendarIcon, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getServerNow } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -57,7 +57,7 @@ export function DatePicker({
     [minDate]
   );
 
-  const today = startOfDay(new Date());
+  const today = startOfDay(getServerNow());
   const canPickToday = !parsedMinDate || today >= startOfDay(parsedMinDate);
 
   return (
@@ -101,6 +101,7 @@ export function DatePicker({
       >
         <Calendar
           mode="single"
+          today={today}
           selected={selectedDate}
           defaultMonth={selectedDate ?? parsedMinDate ?? today}
           disabled={parsedMinDate ? { before: parsedMinDate } : undefined}

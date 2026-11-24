@@ -44,6 +44,7 @@ import {
   formatFileSize,
   formatRelativeTime,
   getDisplayTaskProgress,
+  getServerTodayStr,
   isTaskOverdue,
   validateTaskStatusTransition,
 } from "@/lib/utils";
@@ -702,7 +703,7 @@ export function TaskDetailDrawer({
   const completedSubtasks =
     task?.subtasks.filter((s) => s.status === "DONE").length ?? 0;
   const totalSubtasks = task?.subtasks.length ?? 0;
-  const todayStr = new Date().toLocaleDateString("en-CA");
+  const todayStr = getServerTodayStr();
 
   return (
     <>

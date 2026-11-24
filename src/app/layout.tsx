@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ServerClockSync } from "@/components/shared/server-clock-sync";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans min-h-screen bg-[#F7F8FA] text-[#20232B]">
+        <ServerClockSync serverNowMs={Date.now()} />
         <TooltipProvider delayDuration={200}>
           {children}
           <Toaster
