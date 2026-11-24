@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
@@ -93,54 +93,74 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function parsePlainTextTableToHtml(raw: string): string | null {
-  const lines = raw
+function renderInlineMarkdown(text: string): string {
+  const codeTokens: string[] = [];
+  let out = escapeHtml(text);
+
+  // Protect inline code spans first
+  out = out.replace(/`([^`]+)`/g, (_m, code) => {
+    const idx = codeTokens.push(`<code>${code}</code>`) - 1;
+    return `\u0000CODE${idx}\u0000`;
+  });
+
+  // Links [label](url)
+  out = out.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+  // Bold **text** or __text__
+  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  out = out.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  // Strikethrough ~~text~~
+  out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+  // Italic *text*
+  out = out.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
+
+  // Restore inline code tokens
+  out = out.replace(/\u0000CODE(\d+)\u0000/g, (_m, idx) => codeTokens[Number(idx)] ?? "");
+  return out;
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes("-") || !trimmed.includes("|")) return false;
+  return /^\|?[\s:]*-{2,}[\s:]*(\|[\s:]*-{2,}[\s:]*)+\|?$/.test(trimmed);
+}
+
+function splitPipeRow(line: string): string[] {
+  return line
     .trim()
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return null;
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
+}
 
-  // 1. Markdown pipe table (| col1 | col2 |)
-  if (lines[0].includes("|") && lines[1].replace(/[\s|:-]/g, "") === "") {
-    const splitPipe = (line: string) =>
-      line
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map((c) => c.trim());
-    const headers = splitPipe(lines[0]);
-    const bodyRows = lines.slice(2).map(splitPipe);
-    if (headers.length >= 2 && bodyRows.length >= 1) {
-      const ths = headers
-        .map((h) => `<th><p>${escapeHtml(h)}</p></th>`)
-        .join("");
-      const trs = bodyRows
-        .map(
-          (row) =>
-            `<tr>${headers
-              .map((_, i) => `<td><p>${escapeHtml(row[i] ?? "")}</p></td>`)
-              .join("")}</tr>`
-        )
-        .join("");
-      return `<table><tbody><tr>${ths}</tr>${trs}</tbody></table>`;
-    }
-  }
+function parseMarkdownOrTableToHtml(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
 
-  // 2. Tab-separated table (TSV from spreadsheets / plain text)
-  if (lines.every((l) => l.includes("\t"))) {
-    const rows = lines.map((l) => l.split("\t").map((c) => c.trim()));
+  const rawLines = raw.replace(/\r\n/g, "\n").split("\n");
+  const nonEmptyLines = rawLines.map((l) => l.trim()).filter(Boolean);
+  if (nonEmptyLines.length === 0) return null;
+
+  // 1. Pure tab-separated table (TSV from spreadsheets / plain text)
+  if (
+    nonEmptyLines.length >= 2 &&
+    nonEmptyLines.every((l) => l.includes("\t"))
+  ) {
+    const rows = nonEmptyLines.map((l) => l.split("\t").map((c) => c.trim()));
     const colCount = Math.max(...rows.map((r) => r.length));
     if (colCount >= 2) {
       const ths = Array.from({ length: colCount })
-        .map((_, i) => `<th><p>${escapeHtml(rows[0][i] ?? "")}</p></th>`)
+        .map((_, i) => `<th><p>${renderInlineMarkdown(rows[0][i] ?? "")}</p></th>`)
         .join("");
       const trs = rows
         .slice(1)
         .map(
           (row) =>
             `<tr>${Array.from({ length: colCount })
-              .map((_, i) => `<td><p>${escapeHtml(row[i] ?? "")}</p></td>`)
+              .map((_, i) => `<td><p>${renderInlineMarkdown(row[i] ?? "")}</p></td>`)
               .join("")}</tr>`
         )
         .join("");
@@ -148,7 +168,169 @@ function parsePlainTextTableToHtml(raw: string): string | null {
     }
   }
 
-  return null;
+  // 2. Detect if text contains Markdown structures (headings, pipe tables, lists, code fences, quotes)
+  let hasMarkdownStructure =
+    /^#{1,3}\s+\S/m.test(trimmed) ||
+    /^```/m.test(trimmed) ||
+    /^[-*+]\s+\[[ xX]\]\s+/m.test(trimmed) ||
+    /^[-*+]\s+\S/m.test(trimmed) ||
+    /^\d+\.\s+\S/m.test(trimmed) ||
+    /^>\s+\S/m.test(trimmed);
+
+  if (!hasMarkdownStructure) {
+    for (let i = 0; i < rawLines.length - 1; i++) {
+      if (rawLines[i].includes("|") && isTableSeparatorLine(rawLines[i + 1])) {
+        hasMarkdownStructure = true;
+        break;
+      }
+    }
+  }
+
+  if (!hasMarkdownStructure) return null;
+
+  // 3. Full block-by-block Markdown -> Tiptap HTML conversion
+  const blocks: string[] = [];
+  let i = 0;
+
+  while (i < rawLines.length) {
+    const line = rawLines[i];
+    const t = line.trim();
+
+    if (!t) {
+      i++;
+      continue;
+    }
+
+    // Fenced code block
+    if (t.startsWith("```")) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < rawLines.length && !rawLines[i].trim().startsWith("```")) {
+        codeLines.push(rawLines[i]);
+        i++;
+      }
+      if (i < rawLines.length) i++; // skip closing ```
+      blocks.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      continue;
+    }
+
+    // Markdown pipe table (header row + separator row + 0..N body rows)
+    if (
+      t.includes("|") &&
+      i + 1 < rawLines.length &&
+      isTableSeparatorLine(rawLines[i + 1])
+    ) {
+      const headers = splitPipeRow(t);
+      const colCount = headers.length;
+      i += 2;
+      const bodyRows: string[][] = [];
+      while (
+        i < rawLines.length &&
+        rawLines[i].trim().includes("|") &&
+        !isTableSeparatorLine(rawLines[i])
+      ) {
+        bodyRows.push(splitPipeRow(rawLines[i]));
+        i++;
+      }
+      const ths = headers
+        .map((h) => `<th><p>${renderInlineMarkdown(h)}</p></th>`)
+        .join("");
+      const trs = bodyRows
+        .map(
+          (row) =>
+            `<tr>${Array.from({ length: colCount })
+              .map((_, idx) => `<td><p>${renderInlineMarkdown(row[idx] ?? "")}</p></td>`)
+              .join("")}</tr>`
+        )
+        .join("");
+      blocks.push(`<table><tbody><tr>${ths}</tr>${trs}</tbody></table>`);
+      continue;
+    }
+
+    // Headings H1 - H3
+    const headingMatch = t.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      blocks.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) {
+      blocks.push("<hr>");
+      i++;
+      continue;
+    }
+
+    // Blockquote
+    if (t.startsWith(">")) {
+      const quoteLines: string[] = [];
+      while (i < rawLines.length && rawLines[i].trim().startsWith(">")) {
+        quoteLines.push(rawLines[i].trim().replace(/^>\s?/, ""));
+        i++;
+      }
+      blocks.push(
+        `<blockquote>${quoteLines
+          .map((ql) => `<p>${renderInlineMarkdown(ql)}</p>`)
+          .join("")}</blockquote>`
+      );
+      continue;
+    }
+
+    // Task checklist (- [ ] / - [x])
+    if (/^[-*+]\s+\[[ xX]\]\s+/.test(t)) {
+      const items: string[] = [];
+      while (i < rawLines.length && /^[-*+]\s+\[[ xX]\]\s+/.test(rawLines[i].trim())) {
+        const m = rawLines[i].trim().match(/^[-*+]\s+\[([ xX])\]\s+(.*)$/);
+        if (m) {
+          const checked = m[1].toLowerCase() === "x" ? "true" : "false";
+          items.push(
+            `<li data-type="taskItem" data-checked="${checked}"><p>${renderInlineMarkdown(
+              m[2]
+            )}</p></li>`
+          );
+        }
+        i++;
+      }
+      blocks.push(`<ul data-type="taskList">${items.join("")}</ul>`);
+      continue;
+    }
+
+    // Bullet list
+    if (/^[-*+]\s+/.test(t)) {
+      const items: string[] = [];
+      while (
+        i < rawLines.length &&
+        /^[-*+]\s+/.test(rawLines[i].trim()) &&
+        !/^[-*+]\s+\[[ xX]\]\s+/.test(rawLines[i].trim())
+      ) {
+        const content = rawLines[i].trim().replace(/^[-*+]\s+/, "");
+        items.push(`<li><p>${renderInlineMarkdown(content)}</p></li>`);
+        i++;
+      }
+      blocks.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\.\s+/.test(t)) {
+      const items: string[] = [];
+      while (i < rawLines.length && /^\d+\.\s+/.test(rawLines[i].trim())) {
+        const content = rawLines[i].trim().replace(/^\d+\.\s+/, "");
+        items.push(`<li><p>${renderInlineMarkdown(content)}</p></li>`);
+        i++;
+      }
+      blocks.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    // Standard paragraph
+    blocks.push(`<p>${renderInlineMarkdown(t)}</p>`);
+    i++;
+  }
+
+  return blocks.length > 0 ? blocks.join("") : null;
 }
 
 function stripHtmlPreview(html: string): string {
@@ -206,6 +388,8 @@ export function PersonalNotesWorkspace({
   const [draftContent, setDraftContent] = useState(openNote?.content ?? "");
   const [hasUnsaved, setHasUnsaved] = useState(false);
 
+  const editorRef = useRef<Editor | null>(null);
+
   const editor = useEditor({
     immediatelyRender: false,
     editable: openNote ? openNote.canEdit : true,
@@ -215,7 +399,7 @@ export function PersonalNotesWorkspace({
       }),
       Placeholder.configure({
         placeholder:
-          "Start writing your note... Use headings, checklists, code blocks, quotes, or paste links.",
+          "Start writing your note... Use headings, tables, checklists, code blocks, quotes, or paste Markdown directly.",
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -244,10 +428,10 @@ export function PersonalNotesWorkspace({
           return false;
         }
         const text = event.clipboardData?.getData("text/plain") || "";
-        const tableHtml = parsePlainTextTableToHtml(text);
-        if (tableHtml && editor) {
+        const convertedHtml = parseMarkdownOrTableToHtml(text);
+        if (convertedHtml && editorRef.current) {
           event.preventDefault();
-          editor.chain().focus().insertContent(tableHtml).run();
+          editorRef.current.chain().focus().insertContent(convertedHtml).run();
           return true;
         }
         return false;
@@ -259,6 +443,10 @@ export function PersonalNotesWorkspace({
       setHasUnsaved(true);
     },
   });
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   // Sync editor when opening a note
   useEffect(() => {
