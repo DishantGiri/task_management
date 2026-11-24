@@ -77,8 +77,6 @@ import {
 } from "@/components/ui/select";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 
-const NOTE_ICONS = ["📝", "💡", "📌", "🚀", "✅", "📚", "🧠", "🎯", "🔥", "📋"];
-
 interface ShareableUser {
   id: string;
   name: string;
@@ -189,7 +187,6 @@ export function PersonalNotesWorkspace({
 
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showIconPicker, setShowIconPicker] = useState(false);
 
   // Share dialog state
   const [shareModalNote, setShareModalNote] =
@@ -206,7 +203,6 @@ export function PersonalNotesWorkspace({
   );
 
   const [draftTitle, setDraftTitle] = useState(openNote?.title ?? "");
-  const [draftIcon, setDraftIcon] = useState(openNote?.icon ?? "📝");
   const [draftContent, setDraftContent] = useState(openNote?.content ?? "");
   const [hasUnsaved, setHasUnsaved] = useState(false);
 
@@ -268,17 +264,13 @@ export function PersonalNotesWorkspace({
   useEffect(() => {
     if (!openNote) {
       setDraftTitle("");
-      setDraftIcon("📝");
       setDraftContent("");
       setHasUnsaved(false);
-      setShowIconPicker(false);
       return;
     }
     setDraftTitle(openNote.title);
-    setDraftIcon(openNote.icon);
     setDraftContent(openNote.content);
     setHasUnsaved(false);
-    setShowIconPicker(false);
     if (editor) {
       editor.setEditable(openNote.canEdit);
       if (editor.getHTML() !== openNote.content) {
@@ -295,7 +287,6 @@ export function PersonalNotesWorkspace({
     const res = await updatePersonalNoteAction({
       id: openNote.id,
       title: draftTitle.trim() || "Untitled Note",
-      icon: draftIcon,
       content: html,
     });
     setSaving(false);
@@ -312,7 +303,6 @@ export function PersonalNotesWorkspace({
           ? {
               ...n,
               title: draftTitle.trim() || "Untitled Note",
-              icon: draftIcon,
               content: html,
               updatedAt,
             }
@@ -321,7 +311,7 @@ export function PersonalNotesWorkspace({
     );
     setHasUnsaved(false);
     toast.success("Note saved");
-  }, [openNote, editor, draftContent, draftTitle, draftIcon]);
+  }, [openNote, editor, draftContent, draftTitle]);
 
   // Ctrl+S / Cmd+S shortcut + Esc to close full-screen
   useEffect(() => {
@@ -528,7 +518,8 @@ export function PersonalNotesWorkspace({
   );
 
   return (
-    <div className="space-y-4">
+    <>
+      <div className="space-y-4">
       {/* Top Controls Bar: Scope Tabs, Search, Card/List Toggle, New Note */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -657,8 +648,10 @@ export function PersonalNotesWorkspace({
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-2xl leading-none">{note.icon}</span>
-                    <div className="flex items-center gap-0.5 opacity-80 group-hover:opacity-100">
+                    <h3 className="text-[15px] font-semibold text-[#20232B] line-clamp-1 group-hover:text-[#5148C9] transition-colors pt-0.5">
+                      {note.title || "Untitled Note"}
+                    </h3>
+                    <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100">
                       {note.isOwner && (
                         <>
                           <button
@@ -695,10 +688,7 @@ export function PersonalNotesWorkspace({
                     </div>
                   </div>
 
-                  <h3 className="mt-2.5 text-[15px] font-semibold text-[#20232B] line-clamp-1 group-hover:text-[#5148C9] transition-colors">
-                    {note.title || "Untitled Note"}
-                  </h3>
-                  <p className="mt-1 text-xs text-[#737987] line-clamp-3 leading-relaxed">
+                  <p className="mt-2 text-xs text-[#737987] line-clamp-3 leading-relaxed">
                     {preview || "Empty page — click to start writing..."}
                   </p>
                 </div>
@@ -741,9 +731,6 @@ export function PersonalNotesWorkspace({
                 className="group flex items-center justify-between gap-4 px-4 py-3 cursor-pointer hover:bg-[#F7F8FA] transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className="text-xl leading-none shrink-0">
-                    {note.icon}
-                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="truncate text-sm font-semibold text-[#20232B] group-hover:text-[#5148C9]">
@@ -819,10 +806,11 @@ export function PersonalNotesWorkspace({
         onPageChange={setPage}
         itemLabel="notes"
       />
+      </div>
 
       {/* FULL-SCREEN NOTION-STYLE NOTE EDITOR */}
       {openNote && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+        <div className="fixed inset-0 z-50 h-screen w-screen flex flex-col bg-white">
           {/* Top Full-Screen Header */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EAECF0] bg-white px-4 sm:px-6 py-2.5 shrink-0">
             <div className="flex items-center gap-3 min-w-0">
@@ -838,7 +826,7 @@ export function PersonalNotesWorkspace({
               </Button>
               <span className="h-4 w-px bg-[#EAECF0]" />
               <span className="truncate text-xs font-medium text-[#737987] max-w-[200px] sm:max-w-xs">
-                {draftIcon} {draftTitle || "Untitled Note"}
+                {draftTitle || "Untitled Note"}
               </span>
               {!openNote.canEdit && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10.5px] font-medium text-slate-700">
@@ -1128,35 +1116,7 @@ export function PersonalNotesWorkspace({
                 </div>
               )}
 
-              <div className="flex items-center gap-3 relative">
-                <button
-                  type="button"
-                  disabled={!openNote.canEdit}
-                  onClick={() => setShowIconPicker((v) => !v)}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-transparent text-3xl hover:border-[#EAECF0] hover:bg-[#F7F8FA] transition-colors disabled:cursor-default"
-                  title={openNote.canEdit ? "Change icon" : undefined}
-                >
-                  {draftIcon}
-                </button>
-                {showIconPicker && openNote.canEdit && (
-                  <div className="absolute left-0 top-14 z-20 flex flex-wrap gap-1 rounded-lg border border-[#EAECF0] bg-white p-2 shadow-lg w-56">
-                    {NOTE_ICONS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => {
-                          setDraftIcon(emoji);
-                          setHasUnsaved(true);
-                          setShowIconPicker(false);
-                        }}
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-[#F0EFFF]"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
+              <div>
                 <input
                   value={draftTitle}
                   disabled={!openNote.canEdit}
@@ -1315,6 +1275,6 @@ export function PersonalNotesWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
