@@ -301,3 +301,59 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+.meridian-editor .ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.meridian-editor .ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #d5d9e2;
+  border-radius: 6px;
+}
+
+.meridian-editor .ProseMirror td,
+.meridian-editor .ProseMirror th {
+  min-width: 80px;
+  border: 1px solid #e2e6ee;
+  padding: 8px 10px;
+  vertical-align: top;
+  box-sizing: border-box;
+  position: relative;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.meridian-editor .ProseMirror th {
+  font-weight: 600;
+  text-align: left;
+  background-color: #f7f8fa;
+  color: #20232b;
+}
+
+.meridian-editor .ProseMirror .selectedCell::after {
+  z-index: 2;
+  position: absolute;
+  content: "";
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(99, 91, 219, 0.12);
+  pointer-events: none;
+}
+
+.meridian-editor .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background-color: #635bdb;
+  pointer-events: none;
+}

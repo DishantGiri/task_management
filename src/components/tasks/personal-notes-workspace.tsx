@@ -10,6 +10,12 @@ import Underline from "@tiptap/extension-underline";
 import Highlight from "@tiptap/extension-highlight";
 import LinkExtension from "@tiptap/extension-link";
 import {
+  Table,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from "@tiptap/extension-table";
+import {
   ArrowLeft,
   Bold,
   Check,
@@ -37,6 +43,7 @@ import {
   Share2,
   StickyNote,
   Strikethrough,
+  Table2,
   Trash2,
   Underline as UnderlineIcon,
   Undo,
@@ -78,6 +85,72 @@ interface ShareableUser {
   email: string;
   avatarUrl: string | null;
   designation: string | null;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function parsePlainTextTableToHtml(raw: string): string | null {
+  const lines = raw
+    .trim()
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return null;
+
+  // 1. Markdown pipe table (| col1 | col2 |)
+  if (lines[0].includes("|") && lines[1].replace(/[\s|:-]/g, "") === "") {
+    const splitPipe = (line: string) =>
+      line
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((c) => c.trim());
+    const headers = splitPipe(lines[0]);
+    const bodyRows = lines.slice(2).map(splitPipe);
+    if (headers.length >= 2 && bodyRows.length >= 1) {
+      const ths = headers
+        .map((h) => `<th><p>${escapeHtml(h)}</p></th>`)
+        .join("");
+      const trs = bodyRows
+        .map(
+          (row) =>
+            `<tr>${headers
+              .map((_, i) => `<td><p>${escapeHtml(row[i] ?? "")}</p></td>`)
+              .join("")}</tr>`
+        )
+        .join("");
+      return `<table><tbody><tr>${ths}</tr>${trs}</tbody></table>`;
+    }
+  }
+
+  // 2. Tab-separated table (TSV from spreadsheets / plain text)
+  if (lines.every((l) => l.includes("\t"))) {
+    const rows = lines.map((l) => l.split("\t").map((c) => c.trim()));
+    const colCount = Math.max(...rows.map((r) => r.length));
+    if (colCount >= 2) {
+      const ths = Array.from({ length: colCount })
+        .map((_, i) => `<th><p>${escapeHtml(rows[0][i] ?? "")}</p></th>`)
+        .join("");
+      const trs = rows
+        .slice(1)
+        .map(
+          (row) =>
+            `<tr>${Array.from({ length: colCount })
+              .map((_, i) => `<td><p>${escapeHtml(row[i] ?? "")}</p></td>`)
+              .join("")}</tr>`
+        )
+        .join("");
+      return `<table><tbody><tr>${ths}</tr>${trs}</tbody></table>`;
+    }
+  }
+
+  return null;
 }
 
 function stripHtmlPreview(html: string): string {
@@ -159,7 +232,31 @@ export function PersonalNotesWorkspace({
           target: "_blank",
         },
       }),
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
+    editorProps: {
+      handlePaste: (_view, event) => {
+        const html = event.clipboardData?.getData("text/html") || "";
+        // If clipboard already contains an HTML <table> (Excel, Google Sheets, Notion, web),
+        // let Tiptap's native Table extension parse it directly.
+        if (/<table[\s>]/i.test(html)) {
+          return false;
+        }
+        const text = event.clipboardData?.getData("text/plain") || "";
+        const tableHtml = parsePlainTextTableToHtml(text);
+        if (tableHtml && editor) {
+          event.preventDefault();
+          editor.chain().focus().insertContent(tableHtml).run();
+          return true;
+        }
+        return false;
+      },
+    },
     content: openNote?.content ?? "",
     onUpdate: ({ editor: ed }) => {
       setDraftContent(ed.getHTML());
@@ -931,6 +1028,19 @@ export function PersonalNotesWorkspace({
                 <Code2 className="h-3.5 w-3.5" />
               </ToolbarBtn>
               <ToolbarBtn
+                active={editor.isActive("table")}
+                onClick={() =>
+                  editor
+                    .chain()
+                    .focus()
+                    .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                    .run()
+                }
+                title="Insert Table (or paste directly from Excel / Sheets / Markdown)"
+              >
+                <Table2 className="h-3.5 w-3.5" />
+              </ToolbarBtn>
+              <ToolbarBtn
                 onClick={() => editor.chain().focus().setHorizontalRule().run()}
                 title="Divider"
               >
@@ -949,6 +1059,58 @@ export function PersonalNotesWorkspace({
               >
                 <Redo className="h-3.5 w-3.5" />
               </ToolbarBtn>
+
+              {/* Contextual Table Editing Controls */}
+              {editor.isActive("table") && (
+                <>
+                  <span className="mx-1 h-4 w-px bg-[#E2E6EE]" />
+                  <div className="inline-flex items-center gap-1 rounded-md border border-[#DFDCFF] bg-[#F5F4FF] px-1.5 py-0.5 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        editor.chain().focus().addRowAfter().run()
+                      }
+                      className="rounded px-1.5 py-0.5 font-medium text-[#5148C9] hover:bg-white"
+                    >
+                      + Row
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        editor.chain().focus().addColumnAfter().run()
+                      }
+                      className="rounded px-1.5 py-0.5 font-medium text-[#5148C9] hover:bg-white"
+                    >
+                      + Col
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => editor.chain().focus().deleteRow().run()}
+                      className="rounded px-1.5 py-0.5 font-medium text-[#525866] hover:bg-white"
+                    >
+                      - Row
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        editor.chain().focus().deleteColumn().run()
+                      }
+                      className="rounded px-1.5 py-0.5 font-medium text-[#525866] hover:bg-white"
+                    >
+                      - Col
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        editor.chain().focus().deleteTable().run()
+                      }
+                      className="rounded px-1.5 py-0.5 font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete Table
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
