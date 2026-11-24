@@ -22,7 +22,9 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const cachedPrisma =
-  globalForPrisma.prisma && "milestone" in globalForPrisma.prisma
+  globalForPrisma.prisma &&
+  "milestone" in globalForPrisma.prisma &&
+  "projectPost" in globalForPrisma.prisma
     ? globalForPrisma.prisma
     : undefined;
 

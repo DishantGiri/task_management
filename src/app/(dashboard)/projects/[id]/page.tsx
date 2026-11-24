@@ -24,7 +24,7 @@ export default async function ProjectDetailPage({
   const hasAccess = await canAccessProject(user, id);
   if (!hasAccess) notFound();
 
-  const [projects, tasks, ref, canManage, activities, rawMilestones] =
+  const [projects, tasks, ref, canManage, activities, rawMilestones, rawPosts] =
     await Promise.all([
       getProjectsList(user),
       getTasksList(user, { projectId: id }),
@@ -77,6 +77,21 @@ export default async function ProjectDetailPage({
           },
         },
       }),
+      prisma.projectPost.findMany({
+        where: { projectId: id },
+        orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              avatarUrl: true,
+              role: true,
+              designation: true,
+            },
+          },
+        },
+      }),
     ]);
 
   const project = projects.find((p) => p.id === id);
@@ -108,11 +123,17 @@ export default async function ProjectDetailPage({
     };
   });
 
+  const posts = rawPosts.map((p) => ({
+    ...p,
+    createdAt: p.createdAt.toISOString(),
+  }));
+
   return (
     <ProjectWorkspaceClient
       project={project}
       tasks={tasks}
       milestones={milestones}
+      posts={posts}
       allUsers={ref.users}
       departments={ref.departments}
       tags={ref.tags}

@@ -287,3 +287,19 @@ export const milestoneUpdateSchema = z.object({
   dueDate: z.string().nullable().optional(),
   taskIds: z.array(z.string()).optional(),
 });
+
+export const projectPostCreateSchema = z.object({
+  projectId: z.string().min(1, "Project is required"),
+  type: z.enum(["ANNOUNCEMENT", "SUGGESTION"]).default("SUGGESTION"),
+  title: z
+    .string()
+    .trim()
+    .min(2, "Title must be at least 2 characters")
+    .max(200, "Title must be 200 characters or fewer"),
+  content: z
+    .string()
+    .trim()
+    .min(2, "Message cannot be empty")
+    .max(5000, "Message must be 5,000 characters or fewer"),
+  isPinned: z.boolean().default(false),
+});

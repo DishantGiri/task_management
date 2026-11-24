@@ -12,6 +12,7 @@ import {
   Flag,
   ListTodo,
   Loader2,
+  Megaphone,
   Pencil,
   Search,
   UserMinus,
@@ -23,6 +24,7 @@ import type { ProjectMemberRole, Role } from "@prisma/client";
 import type {
   MilestoneItem,
   ProjectListItem,
+  ProjectPostItem,
   TagSummary,
   TaskListItem,
   UserSummary,
@@ -52,6 +54,8 @@ import {
 import { TasksWorkspace } from "@/components/tasks/tasks-workspace";
 import { ProjectFormDialog } from "@/components/projects/project-form-dialog";
 import { ProjectMilestonesTab } from "@/components/projects/project-milestones-tab";
+import { ProjectPostsTab } from "@/components/projects/project-posts-tab";
+import { RecentActivityCard } from "@/components/dashboard/recent-activity-card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ProjectActivityItem {
@@ -65,6 +69,7 @@ export function ProjectWorkspaceClient({
   project,
   tasks,
   milestones = [],
+  posts = [],
   allUsers,
   departments = [],
   tags,
@@ -76,6 +81,7 @@ export function ProjectWorkspaceClient({
   project: ProjectListItem;
   tasks: TaskListItem[];
   milestones?: MilestoneItem[];
+  posts?: ProjectPostItem[];
   allUsers: UserSummary[];
   departments?: { id: string; name: string }[];
   tags: TagSummary[];
@@ -316,6 +322,10 @@ export function ProjectWorkspaceClient({
             <Flag className="h-3.5 w-3.5" />
             Milestones ({milestones.length})
           </TabsTrigger>
+          <TabsTrigger value="posts" className="gap-1.5">
+            <Megaphone className="h-3.5 w-3.5" />
+            Announcements ({posts.length})
+          </TabsTrigger>
           <TabsTrigger value="members" className="gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Members ({project.members.length})
@@ -357,6 +367,16 @@ export function ProjectWorkspaceClient({
             projectId={project.id}
             milestones={milestones}
             projectTasks={tasks}
+            canManage={canManage}
+          />
+        </TabsContent>
+
+        <TabsContent value="posts">
+          <ProjectPostsTab
+            projectId={project.id}
+            posts={posts}
+            users={allUsers}
+            currentUserId={currentUserId}
             canManage={canManage}
           />
         </TabsContent>
@@ -647,36 +667,14 @@ export function ProjectWorkspaceClient({
         </TabsContent>
 
         <TabsContent value="activity">
-          <div className="max-w-3xl divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white shadow-subtle">
-            {activities.length === 0 ? (
-              <p className="py-10 text-center text-xs text-[#737987]">
-                No activity recorded in this project yet.
-              </p>
-            ) : (
-              activities.map((act) => (
-                <div
-                  key={act.id}
-                  className="flex items-start gap-3 px-4 py-3 text-xs"
-                >
-                  <UserAvatar
-                    name={act.actor.name}
-                    avatarUrl={act.actor.avatarUrl}
-                    size="sm"
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1">
-                    <p className="text-[13px] text-[#20232B]">
-                      <span className="font-medium">{act.actor.name}</span>{" "}
-                      <span className="text-[#525866]">{act.description}</span>
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-[#9CA3AF]">
-                      {formatRelativeTime(act.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <RecentActivityCard
+            activities={activities}
+            title="Project Activity"
+            subtitle="Filter updates by category, team member, or keyword"
+            showProjectFilter={false}
+            pageSize={10}
+            className="max-w-3xl"
+          />
         </TabsContent>
       </Tabs>
 

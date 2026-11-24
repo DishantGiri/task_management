@@ -327,7 +327,7 @@ export const getDashboardData = cache(async (user: SessionUser) => {
                   actor: { role: { not: "ADMIN" } },
                 },
           orderBy: { createdAt: "desc" },
-          take: 10,
+          take: 40,
           include: {
             actor: {
               select: { id: true, name: true, avatarUrl: true, role: true },

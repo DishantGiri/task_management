@@ -220,3 +220,20 @@ export interface MilestoneItem {
     progress: number;
   };
 }
+
+export interface ProjectPostItem {
+  id: string;
+  type: "ANNOUNCEMENT" | "SUGGESTION";
+  title: string;
+  content: string;
+  isPinned: boolean;
+  projectId: string;
+  createdAt: string;
+  author: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    role: Role;
+    designation: string | null;
+  };
+}

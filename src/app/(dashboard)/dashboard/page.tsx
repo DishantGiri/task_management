@@ -31,6 +31,7 @@ import {
   TaskActivityChart,
   TaskStatusDonut,
 } from "@/components/dashboard/dashboard-charts";
+import { RecentActivityCard } from "@/components/dashboard/recent-activity-card";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -438,61 +439,11 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
-          <Card className="lg:col-span-6">
-            <CardHeader className="pb-3">
-              <CardTitle>Recent Activity</CardTitle>
-              <p className="text-xs text-[#737987] mt-0.5">
-                Latest updates across projects and tasks
-              </p>
-            </CardHeader>
-            <CardContent className="p-0">
-              {data.recentActivities.length === 0 ? (
-                <p className="px-5 py-8 text-center text-xs text-[#737987]">
-                  No activity recorded yet.
-                </p>
-              ) : (
-                <div className="divide-y divide-[#EAECF0] border-t border-[#EAECF0]">
-                  {data.recentActivities.map((act) => (
-                    <div
-                      key={act.id}
-                      className="flex items-start gap-3 px-5 py-3"
-                    >
-                      <UserAvatar
-                        name={act.actor.name}
-                        avatarUrl={act.actor.avatarUrl}
-                        size="sm"
-                        className="mt-0.5"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12.5px] text-[#20232B] leading-snug">
-                          <span className="font-medium">{act.actor.name}</span>{" "}
-                          <span className="text-[#525866]">
-                            {act.description}
-                          </span>
-                        </p>
-                        <div className="mt-1 flex items-center gap-2 text-[11px] text-[#9CA3AF]">
-                          <span>{formatRelativeTime(act.createdAt)}</span>
-                          {act.project && (
-                            <>
-                              <span>·</span>
-                              <span className="inline-flex items-center gap-1 text-[#737987]">
-                                <span
-                                  className="h-1.5 w-1.5 rounded-full"
-                                  style={{ backgroundColor: act.project.color }}
-                                />
-                                {act.project.name}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Recent Activity with Filters & Pagination */}
+          <RecentActivityCard
+            activities={data.recentActivities}
+            className="lg:col-span-6"
+          />
         </div>
       )}
     </div>
