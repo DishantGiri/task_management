@@ -23,6 +23,7 @@ import {
   Plus,
   Search,
   Settings,
+  StickyNote,
   Users,
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
@@ -85,6 +86,7 @@ const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Tasks", href: "/my-tasks", icon: CheckSquare },
   { label: "Personal Tasks", href: "/personal-tasks", icon: BookmarkCheck },
+  { label: "Notes", href: "/notes", icon: StickyNote },
   { label: "Inbox", href: "/inbox", icon: Inbox, showBadge: true },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "All Tasks", href: "/tasks", icon: ListTodo },

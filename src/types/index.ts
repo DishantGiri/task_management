@@ -237,3 +237,34 @@ export interface ProjectPostItem {
     designation: string | null;
   };
 }
+
+export interface PersonalNoteShareItem {
+  id: string;
+  userId: string;
+  canEdit: boolean;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+    designation: string | null;
+  };
+}
+
+export interface PersonalNoteItem {
+  id: string;
+  title: string;
+  icon: string;
+  content: string;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  isOwner: boolean;
+  canEdit: boolean;
+  owner: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+  };
+  shares: PersonalNoteShareItem[];
+}

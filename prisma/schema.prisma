@@ -107,6 +107,8 @@ model User {
   triggeredNotifications Notification[]  @relation("NotificationActor")
   activityLogs           ActivityLog[]
   personalTasks          PersonalTask[]
+  personalNotes          PersonalNote[]
+  sharedNotes            PersonalNoteShare[]
   createdMilestones      Milestone[]     @relation("MilestoneCreator")
   projectPosts           ProjectPost[]
 
@@ -134,6 +136,36 @@ model PersonalTask {
   @@index([userId, status])
   @@index([userId, isPinned])
   @@index([userId, dueDate])
+}
+
+model PersonalNote {
+  id        String   @id @default(cuid())
+  title     String   @default("Untitled Note") @db.VarChar(200)
+  icon      String   @default("📝") @db.VarChar(16)
+  content   String   @db.LongText
+  isPinned  Boolean  @default(false)
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shares PersonalNoteShare[]
+
+  @@index([userId, isPinned, updatedAt])
+}
+
+model PersonalNoteShare {
+  id        String   @id @default(cuid())
+  noteId    String
+  userId    String
+  canEdit   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  note PersonalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, userId])
+  @@index([userId])
 }
 
 model Project {
