@@ -2,7 +2,6 @@ import dns from "node:dns";
 import net from "node:net";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { invalidateWorkspaceCache } from "@/lib/cache/redis";
 import { authConfig, SUPER_ADMIN_EMAIL } from "./auth.config";
@@ -84,98 +83,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       issuer: "https://accounts.google.com",
       jwks_endpoint: "https://www.googleapis.com/oauth2/v3/certs",
     }),
-    Credentials({
-      id: "mock-role",
-      name: "Mock Role Login",
-      credentials: {
-        roleKey: { label: "Role Key", type: "text" },
-      },
-      async authorize(credentials) {
-        const roleKey = String(credentials?.roleKey || "").toUpperCase();
-
-        const MOCK_PROFILES = {
-          ADMIN: {
-            email: SUPER_ADMIN_EMAIL,
-            name: "Dishant Giri",
-            role: "ADMIN" as const,
-            status: "ACTIVE" as const,
-            designation: "Administrator",
-          },
-          MANAGER: {
-            email: "manager.test@fishtailinfosolutions.com",
-            name: "Sarah Chen (Manager)",
-            role: "MANAGER" as const,
-            status: "ACTIVE" as const,
-            designation: "Project Manager",
-          },
-          EMPLOYEE: {
-            email: "employee.test@fishtailinfosolutions.com",
-            name: "Alex Rivera (Employee)",
-            role: "EMPLOYEE" as const,
-            status: "ACTIVE" as const,
-            designation: "Software Developer",
-          },
-          PENDING: {
-            email: "pending.test@fishtailinfosolutions.com",
-            name: "Jordan Taylor (Pending)",
-            role: "EMPLOYEE" as const,
-            status: "PENDING" as const,
-            designation: "Awaiting Admin Approval",
-          },
-        };
-
-        const profile =
-          MOCK_PROFILES[roleKey as keyof typeof MOCK_PROFILES];
-        if (!profile) return null;
-
-        const dbUser = await prisma.user.upsert({
-          where: { email: profile.email },
-          update: {
-            role: profile.role,
-            status: profile.status,
-            designation: profile.designation,
-          },
-          create: {
-            name: profile.name,
-            email: profile.email,
-            passwordHash: "",
-            role: profile.role,
-            status: profile.status,
-            designation: profile.designation,
-          },
-        });
-
-        await invalidateWorkspaceCache();
-
-        return {
-          id: dbUser.id,
-          name: dbUser.name,
-          email: dbUser.email,
-          role: dbUser.role,
-          status: dbUser.status,
-          designation: dbUser.designation,
-          avatarUrl: dbUser.avatarUrl,
-          departmentId: dbUser.departmentId,
-        };
-      },
-    }),
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user, account }) {
-      if (
-        account?.type === "credentials" ||
-        account?.provider === "mock-role" ||
-        account?.provider === "credentials"
-      ) {
-        return !!user?.email;
-      }
+    async signIn({ user, account, profile }) {
       if (account?.provider !== "google" || !user?.email) {
         return false;
       }
 
       const email = user.email.toLowerCase().trim();
       const isSuperAdmin = email === SUPER_ADMIN_EMAIL;
+      const googleAvatar =
+        (profile as { picture?: string } | undefined)?.picture ||
+        user.image ||
+        null;
 
       const existing = await prisma.user.findUnique({
         where: { email },
@@ -188,19 +109,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             role: "ADMIN",
             status: "ACTIVE",
             name: existing?.name || user.name || "Dishant Giri",
-            avatarUrl: user.image || existing?.avatarUrl || null,
+            avatarUrl: googleAvatar || existing?.avatarUrl || null,
           },
           create: {
             name: user.name || "Dishant Giri",
             email,
             passwordHash: "",
-            avatarUrl: user.image || null,
+            avatarUrl: googleAvatar,
             role: "ADMIN",
             status: "ACTIVE",
             designation: "Company Administrator",
           },
         });
         user.id = adminUser.id;
+        await invalidateWorkspaceCache();
         return true;
       }
 
@@ -211,7 +133,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: displayName,
             email,
             passwordHash: "",
-            avatarUrl: user.image || null,
+            avatarUrl: googleAvatar,
             role: "EMPLOYEE",
             status: "PENDING",
             designation: "Awaiting Admin Approval",
@@ -240,13 +162,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const updated = await prisma.user.update({
           where: { id: existing.id },
           data: {
-            avatarUrl: existing.avatarUrl || user.image || null,
+            avatarUrl: googleAvatar || existing.avatarUrl || null,
             name: existing.name || user.name || email.split("@")[0],
           },
         });
         user.id = updated.id;
       }
 
+      await invalidateWorkspaceCache();
       return true;
     },
     async jwt({ token, user, trigger, session }) {
