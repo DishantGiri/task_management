@@ -38,7 +38,7 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
       allowedOrigins: [
-        "meridian.dailyworkreport.com",
+        "lakshya.dailyworkreport.com",
         "localhost:3000",
         "localhost:3031",
         "209.126.86.149:3031",
