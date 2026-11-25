@@ -35,6 +35,37 @@
     --radius: 0.5rem;
   }
 
+  .dark {
+    /* Soft slate-graphite dark palette — never pure black */
+    --background: 220 14% 12.5%;
+    --foreground: 220 22% 92%;
+
+    --card: 220 14% 15.5%;
+    --card-foreground: 220 22% 92%;
+
+    --popover: 220 15% 17%;
+    --popover-foreground: 220 22% 92%;
+
+    --primary: 244 76% 68%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 20%;
+    --secondary-foreground: 220 22% 92%;
+
+    --muted: 220 14% 19%;
+    --muted-foreground: 220 12% 62%;
+
+    --accent: 244 45% 24%;
+    --accent-foreground: 244 100% 85%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 221 15% 23.5%;
+    --input: 221 15% 27%;
+    --ring: 244 76% 68%;
+  }
+
   * {
     @apply border-border;
   }
@@ -356,4 +387,293 @@
   width: 4px;
   background-color: #635bdb;
   pointer-events: none;
+}
+
+/* ==========================================================================
+   Soft Slate-Graphite Dark Mode + Fine Grainy Texture (No Pure Black)
+   ========================================================================== */
+
+.meridian-dark-grain {
+  display: none;
+}
+
+html.dark .meridian-dark-grain {
+  display: block;
+  opacity: 0.058;
+  mix-blend-mode: overlay;
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+html.dark,
+html.dark body {
+  background-color: #1b1e24 !important;
+  color: #e6e9f0 !important;
+  background-image: radial-gradient(
+      ellipse 80% 50% at 15% 0%,
+      rgba(124, 117, 240, 0.07),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 90% 100%,
+      rgba(99, 91, 219, 0.05),
+      transparent 55%
+    );
+  background-attachment: fixed;
+}
+
+/* Dark scrollbars */
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3a4150;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #4e576b;
+}
+
+/* Elevated surfaces (Cards, Sidebar, Topbar, Modals, Drawers) */
+html.dark .bg-white {
+  background-color: #22262e !important;
+}
+html.dark .bg-white\/95 {
+  background-color: rgba(34, 38, 46, 0.92) !important;
+}
+html.dark .bg-white\/90 {
+  background-color: rgba(34, 38, 46, 0.88) !important;
+}
+
+/* Canvas & subtle secondary surfaces */
+html.dark .bg-\[\#F7F8FA\],
+html.dark .bg-\[\#FAFBFC\] {
+  background-color: #1b1e24 !important;
+}
+html.dark .bg-\[\#FBFBFF\],
+html.dark .bg-\[\#F3F4F6\],
+html.dark .bg-slate-50,
+html.dark .bg-slate-100 {
+  background-color: #272c36 !important;
+}
+
+/* Indigo soft highlights */
+html.dark .bg-\[\#F0EFFF\],
+html.dark .bg-\[\#F5F4FF\] {
+  background-color: rgba(124, 117, 240, 0.17) !important;
+}
+html.dark .bg-\[\#F0EFFF\]\/40,
+html.dark .bg-\[\#F0EFFF\]\/45 {
+  background-color: rgba(124, 117, 240, 0.1) !important;
+}
+
+/* Hover states */
+html.dark .hover\:bg-\[\#F7F8FA\]:hover,
+html.dark .hover\:bg-\[\#F3F4F6\]:hover,
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-100:hover {
+  background-color: #2d3340 !important;
+}
+html.dark .hover\:bg-\[\#F0EFFF\]:hover {
+  background-color: rgba(124, 117, 240, 0.24) !important;
+}
+html.dark .focus\:bg-white:focus {
+  background-color: #272c36 !important;
+}
+
+/* Typography tokens */
+html.dark .text-\[\#20232B\],
+html.dark .text-\[\#111827\],
+html.dark .text-\[\#1F2937\],
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #e6e9f0 !important;
+}
+html.dark .text-\[\#525866\],
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #b4bccb !important;
+}
+html.dark .text-\[\#737987\],
+html.dark .text-slate-500 {
+  color: #8f98ab !important;
+}
+html.dark .text-\[\#9CA3AF\],
+html.dark .text-slate-400 {
+  color: #778094 !important;
+}
+html.dark .text-\[\#5148C9\] {
+  color: #b4afff !important;
+}
+html.dark .hover\:text-\[\#20232B\]:hover {
+  color: #f1f4f9 !important;
+}
+html.dark .hover\:text-\[\#5148C9\]:hover,
+html.dark .group:hover .group-hover\:text-\[\#5148C9\] {
+  color: #c2beff !important;
+}
+html.dark .group:hover .group-hover\:text-\[\#20232B\] {
+  color: #f1f4f9 !important;
+}
+
+/* Borders & Dividers */
+html.dark .border-\[\#EAECF0\],
+html.dark .border-\[\#F1F3F7\],
+html.dark .border-slate-200,
+html.dark .border-slate-100 {
+  border-color: #323846 !important;
+}
+html.dark .border-\[\#E2E6EE\],
+html.dark .border-\[\#D9DEE7\],
+html.dark .border-\[\#D5D9E2\] {
+  border-color: #3b4252 !important;
+}
+html.dark .border-\[\#DFDCFF\],
+html.dark .border-\[\#E4E2FF\],
+html.dark .border-\[\#D9D6FE\] {
+  border-color: rgba(124, 117, 240, 0.35) !important;
+}
+html.dark .divide-\[\#EAECF0\] > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-\[\#F1F3F7\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #323846 !important;
+}
+html.dark .bg-\[\#EAECF0\],
+html.dark .bg-\[\#E2E6EE\] {
+  background-color: #323846 !important;
+}
+html.dark .ring-white {
+  --tw-ring-color: #22262e !important;
+}
+
+/* Soft semantic tinted surfaces in dark mode */
+html.dark .bg-red-50,
+html.dark .bg-red-50\/40,
+html.dark .bg-red-50\/60,
+html.dark .bg-red-50\/20 {
+  background-color: rgba(239, 68, 68, 0.14) !important;
+}
+html.dark .border-red-200 {
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+html.dark .text-red-700,
+html.dark .text-red-800,
+html.dark .text-red-900 {
+  color: #fca5a5 !important;
+}
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/70 {
+  background-color: rgba(245, 158, 11, 0.14) !important;
+}
+html.dark .border-amber-200,
+html.dark .border-amber-300 {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+html.dark .text-amber-700,
+html.dark .text-amber-800 {
+  color: #fcd34d !important;
+}
+html.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+html.dark .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+html.dark .text-blue-700,
+html.dark .text-blue-800 {
+  color: #93c5fd !important;
+}
+html.dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+}
+html.dark .border-emerald-200 {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+html.dark .text-emerald-700,
+html.dark .text-emerald-800 {
+  color: #6ee7b7 !important;
+}
+
+/* Inputs & Textareas */
+html.dark input,
+html.dark textarea,
+html.dark select {
+  color: #e6e9f0;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6f788c;
+}
+
+/* Notion-style Tiptap Editor in Dark Mode */
+html.dark .meridian-editor .ProseMirror {
+  color: #dfe4ee;
+}
+html.dark .meridian-editor .ProseMirror h1,
+html.dark .meridian-editor .ProseMirror h2,
+html.dark .meridian-editor .ProseMirror h3 {
+  color: #f1f4f9;
+}
+html.dark .meridian-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: #6f788c;
+}
+html.dark .meridian-editor .ProseMirror blockquote {
+  background: rgba(124, 117, 240, 0.12);
+  border-left-color: #7c75f0;
+  color: #c2c9d6;
+}
+html.dark .meridian-editor .ProseMirror code {
+  background: #2b313e;
+  color: #b4afff;
+}
+html.dark .meridian-editor .ProseMirror pre {
+  background: #171a20;
+  border: 1px solid #323846;
+  color: #e6e9f0;
+}
+html.dark .meridian-editor .ProseMirror mark {
+  background-color: rgba(250, 204, 21, 0.28);
+  color: #fef08a;
+}
+html.dark .meridian-editor .ProseMirror hr {
+  border-top-color: #323846;
+}
+html.dark .meridian-editor .ProseMirror a {
+  color: #a5a0ff;
+}
+html.dark .meridian-editor .ProseMirror table {
+  border-color: #3b4252;
+}
+html.dark .meridian-editor .ProseMirror td,
+html.dark .meridian-editor .ProseMirror th {
+  border-color: #323846;
+}
+html.dark .meridian-editor .ProseMirror th {
+  background-color: #282d38;
+  color: #f1f4f9;
+}
+
+/* Recharts dark readability */
+html.dark .recharts-cartesian-grid line {
+  stroke: #323846 !important;
+}
+html.dark .recharts-text {
+  fill: #98a2b3 !important;
+}
+html.dark .recharts-default-tooltip {
+  background-color: #22262e !important;
+  border-color: #3b4252 !important;
+  color: #e6e9f0 !important;
+}
+
+/* View Transitions API — AnimatedThemeToggler */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Scoped to AnimatedThemeToggler — the toggler sets the data-attribute and the variable only during a theme toggle. */
+html[data-magicui-theme-vt="active"]::view-transition-group(root) {
+  animation-duration: var(--magicui-theme-toggle-vt-duration);
+}
+
+html[data-magicui-theme-vt="active"]::view-transition-new(root) {
+  clip-path: var(--magicui-theme-vt-clip-from);
 }

@@ -53,6 +53,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
+import { ThemeToggle } from "@/components/shared/theme-provider";
 
 interface NotificationItem {
   id: string;
@@ -327,7 +328,7 @@ export function AppShell({
             <img
               src="/logo.png"
               alt="Meridian — Acme Enterprise"
-              className="h-9 w-auto max-w-[168px] object-contain"
+              className="h-9 w-auto max-w-[168px] object-contain dark:invert dark:hue-rotate-180"
             />
           )}
         </Link>
@@ -654,6 +655,9 @@ export function AppShell({
 
           {/* Right Controls */}
           <div className="flex items-center gap-2">
+            {/* Light / Dark Theme Toggle */}
+            <ThemeToggle />
+
             {/* Notifications Popover */}
             <Popover open={notifOpen} onOpenChange={setNotifOpen}>
               <PopoverTrigger asChild>
