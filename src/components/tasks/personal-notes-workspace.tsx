@@ -342,6 +342,54 @@ function stripHtmlPreview(html: string): string {
     .trim();
 }
 
+function normalizeNoteHtml(html: string): string {
+  const trimmed = (html || "").trim();
+  return trimmed === "<p></p>" ? "" : trimmed;
+}
+
+function getDraftStorageKey(noteId: string) {
+  return `meridian-note-draft:${noteId}`;
+}
+
+function readLocalDraft(
+  noteId: string
+): { title: string; content: string; savedAt: string } | null {
+  try {
+    const raw = window.localStorage.getItem(getDraftStorageKey(noteId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed?.title === "string" &&
+      typeof parsed?.content === "string" &&
+      typeof parsed?.savedAt === "string"
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalDraft(noteId: string, title: string, content: string) {
+  try {
+    window.localStorage.setItem(
+      getDraftStorageKey(noteId),
+      JSON.stringify({ title, content, savedAt: new Date().toISOString() })
+    );
+  } catch {
+    // ignore quota / storage errors
+  }
+}
+
+function clearLocalDraft(noteId: string) {
+  try {
+    window.localStorage.removeItem(getDraftStorageKey(noteId));
+  } catch {
+    // ignore
+  }
+}
+
 export function PersonalNotesWorkspace({
   initialNotes,
   shareableUsers = [],
@@ -373,10 +421,16 @@ export function PersonalNotesWorkspace({
   const [saving, setSaving] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
   const [autoSave, setAutoSave] = useState<boolean>(true);
+  const [localSaved, setLocalSaved] = useState<boolean>(false);
   const latestDraftRef = useRef<{ title: string; content: string }>({
     title: "",
     content: "",
   });
+  const serverSnapshotRef = useRef<{
+    id: string;
+    title: string;
+    content: string;
+  } | null>(null);
 
   useEffect(() => {
     setPortalMounted(true);
@@ -469,8 +523,18 @@ export function PersonalNotesWorkspace({
     },
     content: openNote?.content ?? "",
     onUpdate: ({ editor: ed }) => {
-      setDraftContent(ed.getHTML());
-      setHasUnsaved(true);
+      const nextHtml = ed.getHTML();
+      setDraftContent(nextHtml);
+      const snap = serverSnapshotRef.current;
+      const changed =
+        !snap ||
+        latestDraftRef.current.title !== snap.title ||
+        normalizeNoteHtml(nextHtml) !== snap.content;
+      setHasUnsaved(changed);
+      setLocalSaved(false);
+      if (!changed && snap) {
+        clearLocalDraft(snap.id);
+      }
     },
   });
 
@@ -486,21 +550,51 @@ export function PersonalNotesWorkspace({
     el.style.height = `${el.scrollHeight}px`;
   }, [draftTitle, openNote?.id]);
 
-  // Sync editor when opening a note
+  // Sync editor when opening a note (restore newer client-side draft if present)
   useEffect(() => {
     if (!openNote) {
+      serverSnapshotRef.current = null;
       setDraftTitle("");
       setDraftContent("");
       setHasUnsaved(false);
+      setLocalSaved(false);
       return;
     }
-    setDraftTitle(openNote.title);
-    setDraftContent(openNote.content);
-    setHasUnsaved(false);
+
+    const serverTitle = openNote.title.trim() || "Untitled Note";
+    const serverContent = normalizeNoteHtml(openNote.content);
+    serverSnapshotRef.current = {
+      id: openNote.id,
+      title: serverTitle,
+      content: serverContent,
+    };
+
+    const localDraft = openNote.canEdit ? readLocalDraft(openNote.id) : null;
+    const hasNewerLocal =
+      localDraft &&
+      ((localDraft.title.trim() || "Untitled Note") !== serverTitle ||
+        normalizeNoteHtml(localDraft.content) !== serverContent) &&
+      new Date(localDraft.savedAt).getTime() >=
+        new Date(openNote.updatedAt).getTime();
+
+    const initialTitle = hasNewerLocal ? localDraft.title : openNote.title;
+    const initialContent = hasNewerLocal
+      ? localDraft.content
+      : openNote.content;
+
+    setDraftTitle(initialTitle);
+    setDraftContent(initialContent);
+    setHasUnsaved(Boolean(hasNewerLocal));
+    setLocalSaved(Boolean(hasNewerLocal));
+
     if (editor) {
       editor.setEditable(openNote.canEdit);
-      if (editor.getHTML() !== openNote.content) {
-        editor.commands.setContent(openNote.content || "");
+      if (
+        normalizeNoteHtml(editor.getHTML()) !== normalizeNoteHtml(initialContent)
+      ) {
+        editor.commands.setContent(initialContent || "", {
+          emitUpdate: false,
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -516,10 +610,26 @@ export function PersonalNotesWorkspace({
 
   const handleSave = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (!openNote || !openNote.canEdit) return;
-      setSaving(true);
+      if (!openNote || !openNote.canEdit) return true;
       const savedTitle = draftTitle.trim() || "Untitled Note";
       const savedHtml = editor ? editor.getHTML() : draftContent;
+      const normalizedHtml = normalizeNoteHtml(savedHtml);
+
+      // Skip API call completely if nothing has actually changed vs server snapshot
+      const snap = serverSnapshotRef.current;
+      if (
+        snap &&
+        snap.id === openNote.id &&
+        snap.title === savedTitle &&
+        snap.content === normalizedHtml
+      ) {
+        clearLocalDraft(openNote.id);
+        setHasUnsaved(false);
+        setLocalSaved(false);
+        return true;
+      }
+
+      setSaving(true);
       const res = await updatePersonalNoteAction({
         id: openNote.id,
         title: savedTitle,
@@ -529,10 +639,16 @@ export function PersonalNotesWorkspace({
 
       if (res.error) {
         toast.error(res.error);
-        return;
+        return false;
       }
 
       const updatedAt = res.updatedAt || new Date().toISOString();
+      serverSnapshotRef.current = {
+        id: openNote.id,
+        title: savedTitle,
+        content: normalizedHtml,
+      };
+      clearLocalDraft(openNote.id);
       setNotes((prev) =>
         prev.map((n) =>
           n.id === openNote.id
@@ -552,25 +668,73 @@ export function PersonalNotesWorkspace({
         latestDraftRef.current.content === savedHtml
       ) {
         setHasUnsaved(false);
+        setLocalSaved(false);
       }
 
       if (!opts?.silent) {
         toast.success("Note saved");
       }
+      return true;
     },
     [openNote, editor, draftContent, draftTitle]
   );
 
-  // 1-second debounced auto-save when Auto-save toggle is ON
+  // 1-second debounced CLIENT-SIDE auto-save (writes to localStorage & local state; no API call until close/manual save)
   useEffect(() => {
-    if (!autoSave || !openNote || !openNote.canEdit || !hasUnsaved || saving) {
+    if (
+      !autoSave ||
+      !openNote ||
+      !openNote.canEdit ||
+      !hasUnsaved ||
+      localSaved
+    ) {
       return;
     }
     const timer = setTimeout(() => {
-      handleSave({ silent: true });
+      const savedTitle = draftTitle.trim() || "Untitled Note";
+      const savedHtml = editor ? editor.getHTML() : draftContent;
+      writeLocalDraft(openNote.id, savedTitle, savedHtml);
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === openNote.id
+            ? { ...n, title: savedTitle, content: savedHtml }
+            : n
+        )
+      );
+      setLocalSaved(true);
     }, 1000);
     return () => clearTimeout(timer);
-  }, [autoSave, openNote, hasUnsaved, saving, draftTitle, draftContent, handleSave]);
+  }, [
+    autoSave,
+    openNote,
+    hasUnsaved,
+    localSaved,
+    draftTitle,
+    draftContent,
+    editor,
+  ]);
+
+  // Flush unsaved draft to localStorage on tab close / reload so nothing is lost
+  useEffect(() => {
+    if (!autoSave || !openNote || !openNote.canEdit || !hasUnsaved) return;
+    const onBeforeUnload = () => {
+      const savedTitle = draftTitle.trim() || "Untitled Note";
+      const savedHtml = editorRef.current
+        ? editorRef.current.getHTML()
+        : draftContent;
+      writeLocalDraft(openNote.id, savedTitle, savedHtml);
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [autoSave, openNote, hasUnsaved, draftTitle, draftContent]);
+
+  // Hit the server API when closing the note (if auto-save is ON and there are unsynced changes)
+  const handleCloseNote = useCallback(async () => {
+    if (openNote && openNote.canEdit && autoSave && hasUnsaved && !saving) {
+      await handleSave({ silent: true });
+    }
+    setOpenNoteId(null);
+  }, [openNote, autoSave, hasUnsaved, saving, handleSave]);
 
   // Lock background scroll while full-screen note editor is open
   useEffect(() => {
@@ -1089,11 +1253,16 @@ export function PersonalNotesWorkspace({
                 type="button"
                 variant="ghost"
                 size="sm"
+                disabled={saving}
                 className="h-8 px-2.5 text-xs text-[#525866]"
-                onClick={() => setOpenNoteId(null)}
+                onClick={handleCloseNote}
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back to Notes
+                {saving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                )}
+                {saving ? "Syncing..." : "Back to Notes"}
               </Button>
               <span className="h-4 w-px bg-[#EAECF0]" />
               <span className="truncate text-xs leading-normal font-medium text-[#737987] max-w-[200px] sm:max-w-xs">
@@ -1163,6 +1332,11 @@ export function PersonalNotesWorkspace({
                       Auto-save
                     </span>
                   </label>
+                  {autoSave && hasUnsaved && localSaved && !saving && (
+                    <span className="hidden sm:inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10.5px] font-medium text-emerald-700">
+                      Saved locally
+                    </span>
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -1413,8 +1587,21 @@ export function PersonalNotesWorkspace({
                     }
                   }}
                   onChange={(e) => {
-                    setDraftTitle(e.target.value.replace(/\r?\n/g, " "));
-                    setHasUnsaved(true);
+                    const nextTitle = e.target.value.replace(/\r?\n/g, " ");
+                    setDraftTitle(nextTitle);
+                    const snap = serverSnapshotRef.current;
+                    const currentHtml = editor
+                      ? editor.getHTML()
+                      : draftContent;
+                    const changed =
+                      !snap ||
+                      (nextTitle.trim() || "Untitled Note") !== snap.title ||
+                      normalizeNoteHtml(currentHtml) !== snap.content;
+                    setHasUnsaved(changed);
+                    setLocalSaved(false);
+                    if (!changed && snap) {
+                      clearLocalDraft(snap.id);
+                    }
                   }}
                   placeholder="Untitled Note"
                   className="block w-full resize-none overflow-hidden py-1.5 text-3xl leading-[1.3] sm:text-4xl sm:leading-[1.3] font-bold tracking-tight text-[#20232B] placeholder:text-[#CBD5E1] bg-transparent focus:outline-none disabled:opacity-100"
