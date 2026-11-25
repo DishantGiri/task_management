@@ -25,9 +25,11 @@ const themes = [
 
 export type ThemeChoice = "light" | "dark" | "system";
 
+export type ThemeOrigin = { x: number; y: number };
+
 export type ThemeSwitcherProps = {
   value?: ThemeChoice;
-  onChange?: (theme: ThemeChoice) => void;
+  onChange?: (theme: ThemeChoice, origin?: ThemeOrigin) => void;
   defaultValue?: ThemeChoice;
   className?: string;
 };
@@ -44,11 +46,19 @@ export const ThemeSwitcher = ({
   const isControlled = value !== undefined;
   const theme = isControlled ? value : internalTheme;
 
-  const setTheme = (next: ThemeChoice) => {
+  const setTheme = (
+    next: ThemeChoice,
+    e: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const origin: ThemeOrigin = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
     if (!isControlled) {
       setInternalTheme(next);
     }
-    onChange?.(next);
+    onChange?.(next, origin);
   };
 
   // Prevent hydration mismatch
@@ -82,7 +92,7 @@ export const ThemeSwitcher = ({
             type="button"
             key={key}
             className="relative flex h-6 w-6 items-center justify-center rounded-full"
-            onClick={() => setTheme(key)}
+            onClick={(e) => setTheme(key, e)}
             aria-label={label}
             title={label}
           >
