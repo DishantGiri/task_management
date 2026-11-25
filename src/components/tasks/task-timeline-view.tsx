@@ -719,21 +719,44 @@ export function TaskTimelineView({
           {(hasAnyDependency || hasAnyBlocked) && (
             <>
               <span className="inline-flex items-center gap-1.5">
-                <span className="inline-flex items-center">
-                  <span className="w-5 border-t-2 border-dashed border-red-500" />
-                  <span className="-ml-0.5 text-[9px] leading-none text-red-500">
-                    ▶
-                  </span>
-                </span>
+                <svg
+                  width="24"
+                  height="10"
+                  viewBox="0 0 24 10"
+                  className="shrink-0"
+                  aria-hidden="true"
+                >
+                  <line
+                    x1="0"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#EF4444"
+                    strokeWidth="1.75"
+                    strokeDasharray="3.5 2.5"
+                  />
+                  <polygon points="16,1.5 23,5 16,8.5" fill="#EF4444" />
+                </svg>
                 Blocking Dependency
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="inline-flex items-center">
-                  <span className="w-5 border-t-2 border-slate-400" />
-                  <span className="-ml-0.5 text-[9px] leading-none text-slate-400">
-                    ▶
-                  </span>
-                </span>
+                <svg
+                  width="24"
+                  height="10"
+                  viewBox="0 0 24 10"
+                  className="shrink-0"
+                  aria-hidden="true"
+                >
+                  <line
+                    x1="0"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#94A3B8"
+                    strokeWidth="1.75"
+                  />
+                  <polygon points="16,1.5 23,5 16,8.5" fill="#94A3B8" />
+                </svg>
                 Resolved Dependency
               </span>
               <span className="inline-flex items-center gap-1.5">
