@@ -58,6 +58,8 @@ interface TasksWorkspaceProps {
   currentUserRole: Role;
   fixedProjectId?: string;
   defaultView?: ViewMode;
+  showScopeToggle?: boolean;
+  defaultScope?: "mine" | "all";
   title?: string;
   subtitle?: string;
 }
@@ -72,12 +74,25 @@ export function TasksWorkspace({
   currentUserRole,
   fixedProjectId,
   defaultView = "kanban",
+  showScopeToggle = false,
+  defaultScope = "all",
   title,
   subtitle,
 }: TasksWorkspaceProps) {
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskListItem[]>(initialTasks);
-  const [view, setView] = useState<ViewMode>(defaultView);
+  const [view, setView] = useState<ViewMode>(() => {
+    const pv = searchParams.get("view");
+    if (pv === "kanban" || pv === "list" || pv === "calendar" || pv === "timeline") {
+      return pv;
+    }
+    return defaultView;
+  });
+  const [scope, setScope] = useState<"mine" | "all">(() => {
+    const ps = searchParams.get("scope");
+    if (ps === "mine" || ps === "all") return ps;
+    return defaultScope;
+  });
 
   // Filters & search
   const [search, setSearch] = useState("");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -369,6 +370,11 @@ export function PersonalNotesWorkspace({
 
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [portalMounted, setPortalMounted] = useState(false);
+
+  useEffect(() => {
+    setPortalMounted(true);
+  }, []);
 
   // Share dialog state
   const [shareModalNote, setShareModalNote] =
@@ -389,6 +395,7 @@ export function PersonalNotesWorkspace({
   const [hasUnsaved, setHasUnsaved] = useState(false);
 
   const editorRef = useRef<Editor | null>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -448,6 +455,14 @@ export function PersonalNotesWorkspace({
     editorRef.current = editor;
   }, [editor]);
 
+  // Auto-resize the Notion-style title textarea so descenders (y, g, j, p) are never clipped
+  useEffect(() => {
+    const el = titleInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draftTitle, openNote?.id]);
+
   // Sync editor when opening a note
   useEffect(() => {
     if (!openNote) {
@@ -500,6 +515,16 @@ export function PersonalNotesWorkspace({
     setHasUnsaved(false);
     toast.success("Note saved");
   }, [openNote, editor, draftContent, draftTitle]);
+
+  // Lock background scroll while full-screen note editor is open
+  useEffect(() => {
+    if (!openNote) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [openNote]);
 
   // Ctrl+S / Cmd+S shortcut + Esc to close full-screen
   useEffect(() => {
@@ -836,7 +861,7 @@ export function PersonalNotesWorkspace({
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-[15px] font-semibold text-[#20232B] line-clamp-1 group-hover:text-[#5148C9] transition-colors pt-0.5">
+                    <h3 className="text-[15px] leading-normal font-semibold text-[#20232B] line-clamp-1 group-hover:text-[#5148C9] transition-colors pt-0.5">
                       {note.title || "Untitled Note"}
                     </h3>
                     <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100">
@@ -921,7 +946,7 @@ export function PersonalNotesWorkspace({
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="truncate text-sm font-semibold text-[#20232B] group-hover:text-[#5148C9]">
+                      <h3 className="truncate text-sm leading-normal font-semibold text-[#20232B] group-hover:text-[#5148C9]">
                         {note.title || "Untitled Note"}
                       </h3>
                       {note.isPinned && (
@@ -996,9 +1021,11 @@ export function PersonalNotesWorkspace({
       />
       </div>
 
-      {/* FULL-SCREEN NOTION-STYLE NOTE EDITOR */}
-      {openNote && (
-        <div className="fixed inset-0 z-50 h-screen w-screen flex flex-col bg-white">
+      {/* FULL-SCREEN NOTION-STYLE NOTE EDITOR (portaled to document.body so parent space-y-* never offsets it) */}
+      {portalMounted &&
+        openNote &&
+        createPortal(
+          <div className="fixed inset-0 top-0 left-0 right-0 bottom-0 z-[45] !m-0 h-screen w-screen flex flex-col bg-white">
           {/* Top Full-Screen Header */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EAECF0] bg-white px-4 sm:px-6 py-2.5 shrink-0">
             <div className="flex items-center gap-3 min-w-0">
@@ -1013,7 +1040,7 @@ export function PersonalNotesWorkspace({
                 Back to Notes
               </Button>
               <span className="h-4 w-px bg-[#EAECF0]" />
-              <span className="truncate text-xs font-medium text-[#737987] max-w-[200px] sm:max-w-xs">
+              <span className="truncate text-xs leading-normal font-medium text-[#737987] max-w-[200px] sm:max-w-xs">
                 {draftTitle || "Untitled Note"}
               </span>
               {!openNote.canEdit && (
@@ -1305,16 +1332,24 @@ export function PersonalNotesWorkspace({
               )}
 
               <div>
-                <input
+                <textarea
+                  ref={titleInputRef}
+                  rows={1}
                   value={draftTitle}
                   disabled={!openNote.canEdit}
                   maxLength={200}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      editor?.commands.focus("start");
+                    }
+                  }}
                   onChange={(e) => {
-                    setDraftTitle(e.target.value);
+                    setDraftTitle(e.target.value.replace(/\r?\n/g, " "));
                     setHasUnsaved(true);
                   }}
                   placeholder="Untitled Note"
-                  className="w-full text-3xl sm:text-4xl font-bold tracking-tight text-[#20232B] placeholder:text-[#CBD5E1] bg-transparent focus:outline-none disabled:opacity-100"
+                  className="block w-full resize-none overflow-hidden py-1.5 text-3xl leading-[1.3] sm:text-4xl sm:leading-[1.3] font-bold tracking-tight text-[#20232B] placeholder:text-[#CBD5E1] bg-transparent focus:outline-none disabled:opacity-100"
                 />
               </div>
 
@@ -1323,7 +1358,8 @@ export function PersonalNotesWorkspace({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Share Note Modal */}
