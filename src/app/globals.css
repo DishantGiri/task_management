@@ -580,7 +580,8 @@ html.dark .border-red-200 {
 }
 html.dark .text-red-700,
 html.dark .text-red-800,
-html.dark .text-red-900 {
+html.dark .text-red-900,
+html.dark .text-red-950 {
   color: #fca5a5 !important;
 }
 html.dark .bg-amber-50,
@@ -595,8 +596,9 @@ html.dark .border-amber-300 {
 }
 html.dark .text-amber-700,
 html.dark .text-amber-800,
-html.dark .text-amber-900 {
-  color: #fcd34d !important;
+html.dark .text-amber-900,
+html.dark .text-amber-950 {
+  color: #fde68a !important;
 }
 html.dark .bg-blue-50,
 html.dark .bg-sky-50 {
@@ -608,6 +610,8 @@ html.dark .border-sky-200 {
 }
 html.dark .text-blue-700,
 html.dark .text-blue-800,
+html.dark .text-blue-900,
+html.dark .text-blue-950,
 html.dark .text-sky-700 {
   color: #93c5fd !important;
 }
@@ -630,7 +634,9 @@ html.dark .border-emerald-200 {
   border-color: rgba(16, 185, 129, 0.35) !important;
 }
 html.dark .text-emerald-700,
-html.dark .text-emerald-800 {
+html.dark .text-emerald-800,
+html.dark .text-emerald-900,
+html.dark .text-emerald-950 {
   color: #6ee7b7 !important;
 }
 
