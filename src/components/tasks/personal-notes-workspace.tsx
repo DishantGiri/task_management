@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "next/navigation";
 import {
   useEditor,
   EditorContent,
@@ -557,6 +558,7 @@ export function PersonalNotesWorkspace({
   shareableUsers?: ShareableUser[];
   initialOpenNoteId?: string | null;
 }) {
+  const searchParams = useSearchParams();
   const [notes, setNotes] = useState<PersonalNoteItem[]>(initialNotes);
   const [openNoteId, setOpenNoteId] = useState<string | null>(() => {
     if (
@@ -567,6 +569,24 @@ export function PersonalNotesWorkspace({
     }
     return null;
   });
+
+  // Open note immediately when clicking a pinned note in the sidebar while already on /notes
+  useEffect(() => {
+    const paramId = searchParams.get("noteId");
+    if (paramId && notes.some((n) => n.id === paramId)) {
+      setOpenNoteId(paramId);
+    }
+  }, [searchParams, notes]);
+
+  // Keep sidebar Pinned Notes section synced in real time
+  useEffect(() => {
+    const pinned = notes
+      .filter((n) => n.isOwner && n.isPinned)
+      .map((n) => ({ id: n.id, title: n.title || "Untitled Note" }));
+    window.dispatchEvent(
+      new CustomEvent("meridian:pinned-notes-updated", { detail: pinned })
+    );
+  }, [notes]);
 
   // Listing state
   const [viewMode, setViewMode] = useState<"card" | "list">("card");

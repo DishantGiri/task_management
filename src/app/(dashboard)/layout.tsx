@@ -19,10 +19,16 @@ export default async function DashboardLayout({
     redirect("/pending-approval");
   }
 
-  const [refData, unreadCount] = await Promise.all([
+  const [refData, unreadCount, pinnedNotes] = await Promise.all([
     getWorkspaceReferenceData(user),
     prisma.notification.count({
       where: { userId: user.id, isRead: false },
+    }),
+    prisma.personalNote.findMany({
+      where: { userId: user.id, isPinned: true },
+      orderBy: { updatedAt: "desc" },
+      take: 6,
+      select: { id: true, title: true },
     }),
   ]);
 
@@ -31,6 +37,7 @@ export default async function DashboardLayout({
       user={user}
       initialUnreadCount={unreadCount}
       projects={refData.projects}
+      pinnedNotes={pinnedNotes}
       users={refData.users}
       tags={refData.tags}
     >

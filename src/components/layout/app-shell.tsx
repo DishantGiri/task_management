@@ -20,6 +20,7 @@ import {
   ListTodo,
   LogOut,
   Menu,
+  Pin,
   Plus,
   Search,
   Settings,
@@ -143,6 +144,7 @@ export function AppShell({
   user,
   initialUnreadCount,
   projects,
+  pinnedNotes = [],
   users,
   tags,
   children,
@@ -150,6 +152,7 @@ export function AppShell({
   user: SessionUser;
   initialUnreadCount: number;
   projects: ProjectSummary[];
+  pinnedNotes?: { id: string; title: string }[];
   users: UserSummary[];
   tags: TagSummary[];
   children: React.ReactNode;
@@ -159,6 +162,28 @@ export function AppShell({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [livePinnedNotes, setLivePinnedNotes] = useState(pinnedNotes);
+
+  useEffect(() => {
+    setLivePinnedNotes(pinnedNotes);
+  }, [pinnedNotes]);
+
+  useEffect(() => {
+    const onPinnedUpdated = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ id: string; title: string }[]>
+      ).detail;
+      if (Array.isArray(detail)) {
+        setLivePinnedNotes(detail);
+      }
+    };
+    window.addEventListener("meridian:pinned-notes-updated", onPinnedUpdated);
+    return () =>
+      window.removeEventListener(
+        "meridian:pinned-notes-updated",
+        onPinnedUpdated
+      );
+  }, []);
 
   // Notifications state with near-real-time polling
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -467,6 +492,44 @@ export function AppShell({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Pinned Notes Quick Jump */}
+        {(!collapsed || isMobile) && (
+          <div className="pt-5">
+            <div className="px-2.5 pb-1.5 flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+                Notes
+              </span>
+              <Link
+                href="/notes"
+                className="text-[11px] text-[#737987] hover:text-[#635BDB]"
+              >
+                All
+              </Link>
+            </div>
+            {livePinnedNotes.length === 0 ? (
+              <p className="px-2.5 py-1 text-[11.5px] text-[#9CA3AF]">
+                No pinned notes
+              </p>
+            ) : (
+              <div className="space-y-0.5">
+                {livePinnedNotes.slice(0, 6).map((note) => (
+                  <Link
+                    key={note.id}
+                    href={`/notes?noteId=${note.id}`}
+                    onClick={() => isMobile && setMobileOpen(false)}
+                    className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12.5px] text-[#525866] hover:bg-[#F7F8FA] hover:text-[#20232B] transition-colors"
+                  >
+                    <Pin className="h-3 w-3 shrink-0 text-[#635BDB]" />
+                    <span className="truncate flex-1">
+                      {note.title || "Untitled Note"}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </nav>

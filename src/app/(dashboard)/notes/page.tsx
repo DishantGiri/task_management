@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Lock } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/permissions";
 import { PersonalNotesWorkspace } from "@/components/tasks/personal-notes-workspace";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default async function NotesPage({
   searchParams,
@@ -94,11 +96,13 @@ export default async function NotesPage({
         </p>
       </div>
 
-      <PersonalNotesWorkspace
-        initialNotes={initialNotes}
-        shareableUsers={workspaceUsers}
-        initialOpenNoteId={params.noteId || null}
-      />
+      <Suspense fallback={<Skeleton className="h-[420px] w-full" />}>
+        <PersonalNotesWorkspace
+          initialNotes={initialNotes}
+          shareableUsers={workspaceUsers}
+          initialOpenNoteId={params.noteId || null}
+        />
+      </Suspense>
     </div>
   );
 }
