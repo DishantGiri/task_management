@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import {
+  useEditor,
+  EditorContent,
+  Node,
+  mergeAttributes,
+  type Editor,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
@@ -28,6 +34,7 @@ import {
   Heading2,
   Heading3,
   Highlighter,
+  Image as ImageIcon,
   Italic,
   LayoutGrid,
   Link as LinkIcon,
@@ -87,6 +94,152 @@ interface ShareableUser {
   designation: string | null;
 }
 
+const NoteImage = Node.create({
+  name: "image",
+  group: "block",
+  draggable: true,
+  atom: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: null },
+      title: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "img[src]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "img",
+      mergeAttributes({ loading: "lazy" }, HTMLAttributes),
+    ];
+  },
+});
+
+const LinkPreviewCard = Node.create({
+  name: "linkPreview",
+  group: "block",
+  draggable: true,
+  atom: true,
+  addAttributes() {
+    return {
+      url: { default: "" },
+      title: { default: "" },
+      description: { default: "" },
+      image: { default: "" },
+      favicon: { default: "" },
+      siteName: { default: "" },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: "a[data-link-preview]",
+        getAttrs: (el) => {
+          if (typeof el === "string") return false;
+          return {
+            url: el.getAttribute("href") || el.getAttribute("data-url") || "",
+            title: el.getAttribute("data-title") || "",
+            description: el.getAttribute("data-description") || "",
+            image: el.getAttribute("data-image") || "",
+            favicon: el.getAttribute("data-favicon") || "",
+            siteName: el.getAttribute("data-site") || "",
+          };
+        },
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const url = String(HTMLAttributes.url || "");
+    const title = String(HTMLAttributes.title || url);
+    const description = String(HTMLAttributes.description || "");
+    const image = String(HTMLAttributes.image || "");
+    const favicon = String(HTMLAttributes.favicon || "");
+    const siteName = String(HTMLAttributes.siteName || "");
+
+    const textChildren: unknown[] = [
+      ["div", { class: "meridian-lp-title" }, title],
+    ];
+    if (description) {
+      textChildren.push(["div", { class: "meridian-lp-desc" }, description]);
+    }
+    const metaChildren: unknown[] = [];
+    if (favicon) {
+      metaChildren.push([
+        "img",
+        { src: favicon, alt: "", class: "meridian-lp-favicon" },
+      ]);
+    }
+    metaChildren.push([
+      "span",
+      { class: "meridian-lp-url" },
+      siteName ? `${siteName} · ${url}` : url,
+    ]);
+    textChildren.push(["div", { class: "meridian-lp-meta" }, ...metaChildren]);
+
+    const cardChildren: unknown[] = [
+      ["div", { class: "meridian-lp-body" }, ...textChildren],
+    ];
+    if (image) {
+      cardChildren.push([
+        "div",
+        { class: "meridian-lp-thumb" },
+        ["img", { src: image, alt: title, loading: "lazy" }],
+      ]);
+    }
+
+    return [
+      "a",
+      mergeAttributes({
+        href: url,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        contenteditable: "false",
+        "data-link-preview": "true",
+        "data-url": url,
+        "data-title": title,
+        "data-description": description,
+        "data-image": image,
+        "data-favicon": favicon,
+        "data-site": siteName,
+        class: "meridian-link-preview",
+      }),
+      ...cardChildren,
+    ] as unknown as readonly [string, ...unknown[]];
+  },
+});
+
+function isImageUrl(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!/^https?:\/\/\S+$/i.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    if (
+      /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(url.pathname)
+    ) {
+      return true;
+    }
+    if (
+      /(images\.unsplash\.com|i\.imgur\.com|pbs\.twimg\.com|i\.redd\.it|lh3\.googleusercontent\.com|images\.pexels\.com)/i.test(
+        url.hostname
+      )
+    ) {
+      return true;
+    }
+    if (url.searchParams.has("format") && /png|jpg|jpeg|webp|gif/i.test(url.searchParams.get("format") || "")) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function isSingleHttpUrl(raw: string): boolean {
+  return /^https?:\/\/[^\s]+$/i.test(raw.trim());
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -105,6 +258,11 @@ function renderInlineMarkdown(text: string): string {
     return `\u0000CODE${idx}\u0000`;
   });
 
+  // Images ![alt](url)
+  out = out.replace(
+    /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<img src="$2" alt="$1" />'
+  );
   // Links [label](url)
   out = out.replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
@@ -502,20 +660,202 @@ export function PersonalNotesWorkspace({
       TableRow,
       TableHeader,
       TableCell,
+      NoteImage,
+      LinkPreviewCard,
     ],
     editorProps: {
       handlePaste: (_view, event) => {
+        const ed = editorRef.current;
+        if (!ed) return false;
+
+        // 1. Pasted image file / screenshot from clipboard
+        const files = Array.from(event.clipboardData?.files ?? []);
+        const imageFile = files.find((f) => f.type.startsWith("image/"));
+        if (imageFile) {
+          event.preventDefault();
+          const reader = new FileReader();
+          reader.onload = () => {
+            const src = typeof reader.result === "string" ? reader.result : "";
+            if (src && editorRef.current) {
+              editorRef.current
+                .chain()
+                .focus()
+                .insertContent({ type: "image", attrs: { src, alt: imageFile.name } })
+                .run();
+            }
+          };
+          reader.readAsDataURL(imageFile);
+          return true;
+        }
+
         const html = event.clipboardData?.getData("text/html") || "";
-        // If clipboard already contains an HTML <table> (Excel, Google Sheets, Notion, web),
-        // let Tiptap's native Table extension parse it directly.
-        if (/<table[\s>]/i.test(html)) {
+        // If clipboard already contains an HTML <table> or <img> (Excel, Google Sheets, Notion, web),
+        // let Tiptap's native extensions parse it directly.
+        if (/<table[\s>]/i.test(html) || /<img[\s>]/i.test(html)) {
           return false;
         }
-        const text = event.clipboardData?.getData("text/plain") || "";
-        const convertedHtml = parseMarkdownOrTableToHtml(text);
-        if (convertedHtml && editorRef.current) {
+
+        const text = (event.clipboardData?.getData("text/plain") || "").trim();
+
+        // 2. Pasted direct image URL -> show clickable link + inline image preview below
+        if (isImageUrl(text)) {
           event.preventDefault();
-          editorRef.current.chain().focus().insertContent(convertedHtml).run();
+          ed.chain()
+            .focus()
+            .insertContent([
+              {
+                type: "paragraph",
+                content: [
+                  {
+                    type: "text",
+                    text,
+                    marks: [
+                      {
+                        type: "link",
+                        attrs: {
+                          href: text,
+                          target: "_blank",
+                          rel: "noopener noreferrer",
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+              { type: "image", attrs: { src: text, alt: "Image" } },
+              { type: "paragraph" },
+            ])
+            .run();
+          return true;
+        }
+
+        // 3. Pasted standard URL -> insert BOTH the clickable link AND the rich preview card below it
+        if (isSingleHttpUrl(text)) {
+          event.preventDefault();
+          let hostname = text;
+          try {
+            hostname = new URL(text).hostname.replace(/^www\./i, "");
+          } catch {
+            // fallback
+          }
+          const initialFavicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+            hostname
+          )}&sz=64`;
+
+          ed.chain()
+            .focus()
+            .insertContent([
+              {
+                type: "paragraph",
+                content: [
+                  {
+                    type: "text",
+                    text,
+                    marks: [
+                      {
+                        type: "link",
+                        attrs: {
+                          href: text,
+                          target: "_blank",
+                          rel: "noopener noreferrer",
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                type: "linkPreview",
+                attrs: {
+                  url: text,
+                  title: hostname,
+                  description: "Loading link preview...",
+                  image: "",
+                  favicon: initialFavicon,
+                  siteName: hostname,
+                },
+              },
+              { type: "paragraph" },
+            ])
+            .run();
+
+          // Fetch OpenGraph preview metadata asynchronously and hydrate the bookmark card
+          fetch(`/api/link-preview?url=${encodeURIComponent(text)}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((meta) => {
+              const liveEditor = editorRef.current;
+              if (!liveEditor || !meta) return;
+
+              // If the URL turned out to be an image response, replace with inline image
+              if (meta.isImage && meta.image) {
+                liveEditor.state.doc.descendants((node, pos) => {
+                  if (
+                    node.type.name === "linkPreview" &&
+                    node.attrs.url === text
+                  ) {
+                    const tr = liveEditor.state.tr.replaceWith(
+                      pos,
+                      pos + node.nodeSize,
+                      liveEditor.schema.nodes.image.create({
+                        src: meta.image,
+                        alt: meta.title || "Image",
+                      })
+                    );
+                    liveEditor.view.dispatch(tr);
+                    return false;
+                  }
+                  return true;
+                });
+                return;
+              }
+
+              liveEditor.state.doc.descendants((node, pos) => {
+                if (
+                  node.type.name === "linkPreview" &&
+                  node.attrs.url === text
+                ) {
+                  const tr = liveEditor.state.tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    title: meta.title || hostname,
+                    description: meta.description || "",
+                    image: meta.image || "",
+                    favicon: meta.favicon || initialFavicon,
+                    siteName: meta.siteName || hostname,
+                  });
+                  liveEditor.view.dispatch(tr);
+                  return false;
+                }
+                return true;
+              });
+            })
+            .catch(() => {
+              const liveEditor = editorRef.current;
+              if (!liveEditor) return;
+              liveEditor.state.doc.descendants((node, pos) => {
+                if (
+                  node.type.name === "linkPreview" &&
+                  node.attrs.url === text &&
+                  node.attrs.description === "Loading link preview..."
+                ) {
+                  const tr = liveEditor.state.tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    description: "",
+                  });
+                  liveEditor.view.dispatch(tr);
+                  return false;
+                }
+                return true;
+              });
+            });
+
+          return true;
+        }
+
+        // 4. Pasted Markdown document / pipe tables / TSV tables
+        const convertedHtml = parseMarkdownOrTableToHtml(text);
+        if (convertedHtml) {
+          event.preventDefault();
+          ed.chain().focus().insertContent(convertedHtml).run();
           return true;
         }
         return false;
@@ -859,6 +1199,20 @@ export function PersonalNotesWorkspace({
       .focus()
       .extendMarkRange("link")
       .setLink({ href: safeUrl })
+      .run();
+  };
+
+  const handleInsertImage = () => {
+    if (!editor) return;
+    const url = window.prompt("Paste image URL (https://...):");
+    if (!url || !url.trim()) return;
+    const safeUrl = /^https?:\/\//i.test(url.trim())
+      ? url.trim()
+      : `https://${url.trim()}`;
+    editor
+      .chain()
+      .focus()
+      .insertContent({ type: "image", attrs: { src: safeUrl, alt: "Image" } })
       .run();
   };
 
@@ -1407,6 +1761,12 @@ export function PersonalNotesWorkspace({
                 title="Link"
               >
                 <LinkIcon className="h-3.5 w-3.5" />
+              </ToolbarBtn>
+              <ToolbarBtn
+                onClick={handleInsertImage}
+                title="Insert Image (or paste any image / image URL directly)"
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
               </ToolbarBtn>
               <span className="mx-1 h-4 w-px bg-[#E2E6EE]" />
               <ToolbarBtn

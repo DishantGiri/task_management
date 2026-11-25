@@ -81,6 +81,17 @@
       BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     line-height: 1.55;
   }
+
+  /* Custom light-purple text selection highlight */
+  ::selection {
+    background-color: rgba(139, 92, 246, 0.26);
+    color: #20232b;
+  }
+
+  html.dark ::selection {
+    background-color: rgba(167, 139, 250, 0.34);
+    color: #f8fafc;
+  }
 }
 
 /* Global typography scale-up for arbitrary small text classes */
@@ -327,10 +338,193 @@
   margin: 1rem 0;
 }
 
-.meridian-editor .ProseMirror a {
-  color: #635bdb;
+.meridian-editor .ProseMirror a:not(.meridian-link-preview) {
+  color: #5b52d6;
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-color: rgba(99, 91, 219, 0.4);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.05rem 0.22rem;
+  margin: 0 -0.1rem;
+  transition: background-color 140ms ease, color 140ms ease, text-decoration-color 140ms ease;
+}
+
+.meridian-editor .ProseMirror a:not(.meridian-link-preview):hover {
+  background-color: #f0efff;
+  color: #4338ca;
+  text-decoration-color: #4338ca;
+  cursor: pointer;
+}
+
+html.dark .meridian-editor .ProseMirror a:not(.meridian-link-preview) {
+  color: #a5a0ff;
+  text-decoration-color: rgba(165, 160, 255, 0.45);
+}
+
+html.dark .meridian-editor .ProseMirror a:not(.meridian-link-preview):hover {
+  background-color: rgba(124, 117, 240, 0.2);
+  color: #c7c3ff;
+  text-decoration-color: #c7c3ff;
+}
+
+.meridian-editor .ProseMirror img {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid #eaecf0;
+  margin: 0.75rem 0;
+  object-fit: contain;
+}
+
+.meridian-editor .ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #635bdb;
+  outline-offset: 2px;
+}
+
+html.dark .meridian-editor .ProseMirror img {
+  border-color: #323846;
+}
+
+/* Notion-style Rich Link Preview Bookmark Card */
+.meridian-editor .ProseMirror a.meridian-link-preview {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  text-decoration: none;
+  border: 1px solid #e4e7ee;
+  border-left: 3px solid #635bdb;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+  margin: 0.65rem 0 0.9rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease, transform 150ms ease;
+  cursor: pointer;
+}
+
+.meridian-editor .ProseMirror a.meridian-link-preview * {
+  cursor: pointer;
+}
+
+.meridian-editor .ProseMirror a.meridian-link-preview:hover {
+  border-color: #635bdb;
+  box-shadow: 0 6px 18px rgba(99, 91, 219, 0.11);
+  background: #faf9ff;
+  transform: translateY(-1px);
+}
+
+.meridian-editor .ProseMirror a.meridian-link-preview.ProseMirror-selectednode {
+  outline: 2px solid #635bdb;
+  outline-offset: 2px;
+}
+
+.meridian-editor .ProseMirror .meridian-lp-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.meridian-editor .ProseMirror .meridian-lp-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #20232b;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meridian-editor .ProseMirror .meridian-lp-desc {
+  font-size: 12.5px;
+  color: #737987;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meridian-editor .ProseMirror .meridian-lp-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.meridian-editor .ProseMirror img.meridian-lp-favicon {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: none;
+  border-radius: 3px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.meridian-editor .ProseMirror .meridian-lp-url {
+  font-size: 11.5px;
+  color: #635bdb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meridian-editor .ProseMirror .meridian-lp-thumb {
+  width: 190px;
+  max-width: 34%;
+  flex-shrink: 0;
+  border-left: 1px solid #eaecf0;
+  background: #f7f8fa;
+  overflow: hidden;
+}
+
+.meridian-editor .ProseMirror .meridian-lp-thumb img {
+  width: 100%;
+  height: 100%;
+  min-height: 104px;
+  max-height: 132px;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  object-fit: cover;
+  display: block;
+}
+
+html.dark .meridian-editor .ProseMirror a.meridian-link-preview {
+  background: #272c36;
+  border-color: #363d4d;
+}
+
+html.dark .meridian-editor .ProseMirror a.meridian-link-preview:hover {
+  background: #2c323f;
+  border-color: #7c75f0;
+}
+
+html.dark .meridian-editor .ProseMirror .meridian-lp-title {
+  color: #e6e9f0;
+}
+
+html.dark .meridian-editor .ProseMirror .meridian-lp-desc {
+  color: #98a2b3;
+}
+
+html.dark .meridian-editor .ProseMirror .meridian-lp-url {
+  color: #a5a0ff;
+}
+
+html.dark .meridian-editor .ProseMirror .meridian-lp-thumb {
+  border-left-color: #363d4d;
+  background: #1e222a;
 }
 
 .meridian-editor .ProseMirror .tableWrapper {
