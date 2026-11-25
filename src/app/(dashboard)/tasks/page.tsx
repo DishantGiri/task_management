@@ -62,8 +62,10 @@ export default async function AllTasksPage() {
         currentUserId={user.id}
         currentUserRole={user.role}
         defaultView="kanban"
-        title="All Tasks"
-        subtitle="Manage work across Kanban board, list, calendar, and timeline views."
+        showScopeToggle
+        defaultScope={user.role === "EMPLOYEE" ? "mine" : "all"}
+        title="Tasks"
+        subtitle="Track your assigned tasks and team work across Board, List, Calendar, and Timeline."
       />
     </Suspense>
   );

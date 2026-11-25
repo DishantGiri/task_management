@@ -124,14 +124,40 @@ export function TasksWorkspace({
       setSelectedTaskId(paramTaskId);
       setDrawerOpen(true);
     }
+    const pv = searchParams.get("view");
+    if (pv === "kanban" || pv === "list" || pv === "calendar" || pv === "timeline") {
+      setView(pv);
+    }
+    const ps = searchParams.get("scope");
+    if (ps === "mine" || ps === "all") {
+      setScope(ps);
+    }
   }, [searchParams]);
 
   const canCreate =
     currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
 
+  const myTasksCount = useMemo(
+    () =>
+      tasks.filter(
+        (t) =>
+          t.assigneeId === currentUserId ||
+          t.collaborators.some((c) => c.user.id === currentUserId)
+      ).length,
+    [tasks, currentUserId]
+  );
+
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = tasks.filter((t) => {
+      if (
+        showScopeToggle &&
+        scope === "mine" &&
+        t.assigneeId !== currentUserId &&
+        !t.collaborators.some((c) => c.user.id === currentUserId)
+      ) {
+        return false;
+      }
       if (projectFilter !== "ALL" && t.projectId !== projectFilter) return false;
       if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
       if (priorityFilter !== "ALL" && t.priority !== priorityFilter)
@@ -183,6 +209,9 @@ export function TasksWorkspace({
     priorityFilter,
     assigneeFilter,
     sortBy,
+    showScopeToggle,
+    scope,
+    currentUserId,
   ]);
 
   const hasActiveFilters =
@@ -248,27 +277,79 @@ export function TasksWorkspace({
       {/* View Switcher + Filter Toolbar */}
       <div className="flex flex-col gap-3 rounded-lg border border-[#EAECF0] bg-white p-3 shadow-subtle">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* View Tabs */}
-          <div className="inline-flex items-center rounded-md border border-[#EAECF0] bg-[#F7F8FA] p-0.5">
-            {viewTabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Optional My Tasks / All Tasks Scope Toggle */}
+            {showScopeToggle && (
+              <div className="inline-flex items-center rounded-md border border-[#EAECF0] bg-[#F7F8FA] p-0.5">
                 <button
-                  key={tab.id}
                   type="button"
-                  onClick={() => setView(tab.id)}
+                  onClick={() => setScope("mine")}
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-all",
-                    view === tab.id
-                      ? "bg-white text-[#20232B] shadow-subtle"
+                    scope === "mine"
+                      ? "bg-[#635BDB] text-white shadow-subtle"
                       : "text-[#737987] hover:text-[#20232B]"
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
+                  My Tasks
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0 text-[10px]",
+                      scope === "mine"
+                        ? "bg-white/20 text-white"
+                        : "bg-[#EAECF0] text-[#525866]"
+                    )}
+                  >
+                    {myTasksCount}
+                  </span>
                 </button>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => setScope("all")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-all",
+                    scope === "all"
+                      ? "bg-[#635BDB] text-white shadow-subtle"
+                      : "text-[#737987] hover:text-[#20232B]"
+                  )}
+                >
+                  All Tasks
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0 text-[10px]",
+                      scope === "all"
+                        ? "bg-white/20 text-white"
+                        : "bg-[#EAECF0] text-[#525866]"
+                    )}
+                  >
+                    {tasks.length}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* View Tabs */}
+            <div className="inline-flex items-center rounded-md border border-[#EAECF0] bg-[#F7F8FA] p-0.5">
+              {viewTabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setView(tab.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-all",
+                      view === tab.id
+                        ? "bg-white text-[#20232B] shadow-subtle"
+                        : "text-[#737987] hover:text-[#20232B]"
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Search & Sort */}
