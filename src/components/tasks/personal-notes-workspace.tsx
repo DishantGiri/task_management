@@ -60,6 +60,7 @@ import {
 } from "@/actions/personal-notes";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { UserAvatar } from "@/components/ui/avatar";
 import {
   Dialog,
@@ -371,10 +372,32 @@ export function PersonalNotesWorkspace({
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
+  const [autoSave, setAutoSave] = useState<boolean>(true);
+  const latestDraftRef = useRef<{ title: string; content: string }>({
+    title: "",
+    content: "",
+  });
 
   useEffect(() => {
     setPortalMounted(true);
+    try {
+      const savedPref = window.localStorage.getItem("meridian-notes-autosave");
+      if (savedPref === "false") {
+        setAutoSave(false);
+      }
+    } catch {
+      // ignore storage errors
+    }
   }, []);
+
+  const handleToggleAutoSave = (checked: boolean) => {
+    setAutoSave(checked);
+    try {
+      window.localStorage.setItem("meridian-notes-autosave", String(checked));
+    } catch {
+      // ignore
+    }
+  };
 
   // Share dialog state
   const [shareModalNote, setShareModalNote] =
@@ -483,38 +506,71 @@ export function PersonalNotesWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openNote?.id, openNote?.canEdit, editor]);
 
-  const handleSave = useCallback(async () => {
-    if (!openNote || !openNote.canEdit) return;
-    setSaving(true);
-    const html = editor ? editor.getHTML() : draftContent;
-    const res = await updatePersonalNoteAction({
-      id: openNote.id,
+  // Keep latest draft ref in sync so mid-save keystrokes are never dropped
+  useEffect(() => {
+    latestDraftRef.current = {
       title: draftTitle.trim() || "Untitled Note",
-      content: html,
-    });
-    setSaving(false);
+      content: draftContent,
+    };
+  }, [draftTitle, draftContent]);
 
-    if (res.error) {
-      toast.error(res.error);
+  const handleSave = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!openNote || !openNote.canEdit) return;
+      setSaving(true);
+      const savedTitle = draftTitle.trim() || "Untitled Note";
+      const savedHtml = editor ? editor.getHTML() : draftContent;
+      const res = await updatePersonalNoteAction({
+        id: openNote.id,
+        title: savedTitle,
+        content: savedHtml,
+      });
+      setSaving(false);
+
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+
+      const updatedAt = res.updatedAt || new Date().toISOString();
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === openNote.id
+            ? {
+                ...n,
+                title: savedTitle,
+                content: savedHtml,
+                updatedAt,
+              }
+            : n
+        )
+      );
+
+      // Only mark clean if user didn't type more while the save was in-flight
+      if (
+        latestDraftRef.current.title === savedTitle &&
+        latestDraftRef.current.content === savedHtml
+      ) {
+        setHasUnsaved(false);
+      }
+
+      if (!opts?.silent) {
+        toast.success("Note saved");
+      }
+    },
+    [openNote, editor, draftContent, draftTitle]
+  );
+
+  // 1-second debounced auto-save when Auto-save toggle is ON
+  useEffect(() => {
+    if (!autoSave || !openNote || !openNote.canEdit || !hasUnsaved || saving) {
       return;
     }
-
-    const updatedAt = res.updatedAt || new Date().toISOString();
-    setNotes((prev) =>
-      prev.map((n) =>
-        n.id === openNote.id
-          ? {
-              ...n,
-              title: draftTitle.trim() || "Untitled Note",
-              content: html,
-              updatedAt,
-            }
-          : n
-      )
-    );
-    setHasUnsaved(false);
-    toast.success("Note saved");
-  }, [openNote, editor, draftContent, draftTitle]);
+    const timer = setTimeout(() => {
+      handleSave({ silent: true });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [autoSave, openNote, hasUnsaved, saving, draftTitle, draftContent, handleSave]);
 
   // Lock background scroll while full-screen note editor is open
   useEffect(() => {
@@ -1096,20 +1152,32 @@ export function PersonalNotesWorkspace({
               )}
 
               {openNote.canEdit && (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!hasUnsaved || saving}
-                  className="h-8 px-3.5 text-xs"
-                  onClick={handleSave}
-                >
-                  {saving ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Check className="h-3.5 w-3.5" />
-                  )}
-                  {hasUnsaved ? "Save" : "Saved"}
-                </Button>
+                <>
+                  <label className="inline-flex items-center gap-1.5 rounded-md border border-[#EAECF0] bg-[#F7F8FA] px-2.5 h-8 cursor-pointer select-none">
+                    <Switch
+                      checked={autoSave}
+                      onCheckedChange={handleToggleAutoSave}
+                      aria-label="Toggle auto-save"
+                    />
+                    <span className="text-[11.5px] font-medium text-[#525866]">
+                      Auto-save
+                    </span>
+                  </label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!hasUnsaved || saving}
+                    className="h-8 px-3.5 text-xs"
+                    onClick={() => handleSave()}
+                  >
+                    {saving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    {saving ? "Saving..." : hasUnsaved ? "Save" : "Saved"}
+                  </Button>
+                </>
               )}
             </div>
           </div>

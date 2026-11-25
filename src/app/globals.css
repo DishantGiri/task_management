@@ -689,6 +689,11 @@ html.dark .meridian-editor .ProseMirror pre {
   border: 1px solid #323846;
   color: #e6e9f0;
 }
+html.dark .meridian-editor .ProseMirror pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
 html.dark .meridian-editor .ProseMirror mark {
   background-color: rgba(250, 204, 21, 0.28);
   color: #fef08a;
