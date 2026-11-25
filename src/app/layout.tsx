@@ -3,6 +3,7 @@ import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ServerClockSync } from "@/components/shared/server-clock-sync";
 import { ThemeProvider } from "@/components/shared/theme-provider";
+import { OfflineMonitor } from "@/components/shared/offline-monitor";
 import "./globals.css";
 
 const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem("meridian-theme");var d=s==="dark"||(s!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark";}else{document.documentElement.classList.remove("dark");document.documentElement.style.colorScheme="light";}}catch(e){}})();`;
@@ -39,6 +40,7 @@ export default function RootLayout({
       <body className="font-sans min-h-screen bg-[#F7F8FA] text-[#20232B]">
         <ServerClockSync serverNowMs={Date.now()} />
         <ThemeProvider>
+          <OfflineMonitor />
           <TooltipProvider delayDuration={200}>
             {children}
             <Toaster

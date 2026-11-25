@@ -644,6 +644,9 @@ html.dark .bg-\[\#F7F8FA\],
 html.dark .bg-\[\#FAFBFC\] {
   background-color: #1b1e24 !important;
 }
+html.dark .bg-\[\#F7F8FA\]\/95 {
+  background-color: rgba(27, 30, 36, 0.94) !important;
+}
 html.dark .bg-\[\#F7F8FA\]\/80,
 html.dark .bg-\[\#F7F8FA\]\/70,
 html.dark .bg-\[\#F3F5F8\]\/70 {
