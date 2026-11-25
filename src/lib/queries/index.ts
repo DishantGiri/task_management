@@ -295,12 +295,52 @@ export const getProjectsList = cache(
 
 export const getDashboardData = cache(async (user: SessionUser) => {
   return withCache(
-    `meridian:dashboard:v3:${user.id}:${user.role}`,
+    `meridian:dashboard:v4:${user.id}:${user.role}`,
     45,
     async () => {
   const accessibleProjectIds = await getAccessibleProjectIds(user);
   const projectFilter =
     accessibleProjectIds !== null ? { in: accessibleProjectIds } : undefined;
+  const isAdmin = user.role === "ADMIN";
+  const isEmployee = user.role === "EMPLOYEE";
+
+  // For Employees, scope Overview KPIs, charts, and deadlines strictly to their own work
+  const taskScopeWhere: Prisma.TaskWhereInput = {
+    parentId: null,
+    ...(projectFilter ? { projectId: projectFilter } : {}),
+    ...(isEmployee
+      ? {
+          OR: [
+            { assigneeId: user.id },
+            { collaborators: { some: { userId: user.id } } },
+          ],
+        }
+      : {}),
+  };
+
+  // For Managers, scope team count & workload strictly to members of their accessible projects
+  const scopedUserWhere: Prisma.UserWhereInput = isAdmin
+    ? { status: { not: "INACTIVE" } }
+    : {
+        status: "ACTIVE",
+        OR: [
+          {
+            projectMemberships: {
+              some: { projectId: projectFilter ?? { in: [] } },
+            },
+          },
+          {
+            managedProjects: {
+              some: { id: projectFilter ?? { in: [] } },
+            },
+          },
+          {
+            assignedTasks: {
+              some: { projectId: projectFilter ?? { in: [] } },
+            },
+          },
+        ],
+      };
 
   const NON_ADMIN_TASK_ACTIONS = [
     "TASK_CREATED",
@@ -323,7 +363,9 @@ export const getDashboardData = cache(async (user: SessionUser) => {
     upcomingTasks,
     employeesWithTasks,
   ] = await Promise.all([
-    prisma.user.count({ where: { status: { not: "INACTIVE" } } }),
+    isEmployee
+      ? Promise.resolve(0)
+      : prisma.user.count({ where: scopedUserWhere }),
     prisma.project.count({
       where: {
         status: "ACTIVE",
@@ -331,10 +373,7 @@ export const getDashboardData = cache(async (user: SessionUser) => {
       },
     }),
     prisma.task.findMany({
-      where: {
-        parentId: null,
-        ...(projectFilter ? { projectId: projectFilter } : {}),
-      },
+      where: taskScopeWhere,
       select: {
         id: true,
         status: true,
@@ -345,18 +384,17 @@ export const getDashboardData = cache(async (user: SessionUser) => {
       },
     }),
     getProjectsList(user),
-    user.role === "EMPLOYEE"
+    isEmployee
       ? Promise.resolve([])
       : prisma.activityLog.findMany({
-          where:
-            user.role === "ADMIN"
-              ? undefined
-              : {
-                  entityType: "TASK",
-                  action: { in: NON_ADMIN_TASK_ACTIONS },
-                  ...(projectFilter ? { projectId: projectFilter } : {}),
-                  actor: { role: { not: "ADMIN" } },
-                },
+          where: isAdmin
+            ? undefined
+            : {
+                entityType: "TASK",
+                action: { in: NON_ADMIN_TASK_ACTIONS },
+                ...(projectFilter ? { projectId: projectFilter } : {}),
+                actor: { role: { not: "ADMIN" } },
+              },
           orderBy: { createdAt: "desc" },
           take: 40,
           include: {
@@ -373,6 +411,14 @@ export const getDashboardData = cache(async (user: SessionUser) => {
         status: { not: "DONE" },
         dueDate: { not: null },
         ...(projectFilter ? { projectId: projectFilter } : {}),
+        ...(isEmployee
+          ? {
+              OR: [
+                { assigneeId: user.id },
+                { collaborators: { some: { userId: user.id } } },
+              ],
+            }
+          : {}),
       },
       orderBy: { dueDate: "asc" },
       take: 8,
@@ -381,25 +427,27 @@ export const getDashboardData = cache(async (user: SessionUser) => {
         assignee: { select: { id: true, name: true, avatarUrl: true } },
       },
     }),
-    prisma.user.findMany({
-      where: { status: { not: "INACTIVE" } },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        designation: true,
-        avatarUrl: true,
-        role: true,
-        department: { select: { name: true } },
-        assignedTasks: {
-          where: {
-            parentId: null,
-            ...(projectFilter ? { projectId: projectFilter } : {}),
+    isEmployee
+      ? Promise.resolve([])
+      : prisma.user.findMany({
+          where: scopedUserWhere,
+          orderBy: { name: "asc" },
+          select: {
+            id: true,
+            name: true,
+            designation: true,
+            avatarUrl: true,
+            role: true,
+            department: { select: { name: true } },
+            assignedTasks: {
+              where: {
+                parentId: null,
+                ...(projectFilter ? { projectId: projectFilter } : {}),
+              },
+              select: { id: true, status: true, dueDate: true },
+            },
           },
-          select: { id: true, status: true, dueDate: true },
-        },
-      },
-    }),
+        }),
   ]);
 
   const totalTasks = allTopTasks.length;

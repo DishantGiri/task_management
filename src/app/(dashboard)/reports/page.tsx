@@ -9,11 +9,40 @@ export default async function ReportsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?reauth=1");
 
+  // Only Admin and Manager can access Reports
+  if (user.role === "EMPLOYEE") {
+    redirect("/dashboard");
+  }
+
+  const isAdmin = user.role === "ADMIN";
   const accessibleProjectIds = await getAccessibleProjectIds(user);
   const projectFilter =
     accessibleProjectIds !== null ? { in: accessibleProjectIds } : undefined;
 
-  const [tasks, projects, users, departments] = await Promise.all([
+  const scopedUserWhere = isAdmin
+    ? { status: { not: "INACTIVE" as const } }
+    : {
+        status: "ACTIVE" as const,
+        OR: [
+          {
+            projectMemberships: {
+              some: { projectId: projectFilter ?? { in: [] } },
+            },
+          },
+          {
+            managedProjects: {
+              some: { id: projectFilter ?? { in: [] } },
+            },
+          },
+          {
+            assignedTasks: {
+              some: { projectId: projectFilter ?? { in: [] } },
+            },
+          },
+        ],
+      };
+
+  const [tasks, projects, users, allDepartments] = await Promise.all([
     prisma.task.findMany({
       where: {
         parentId: null,
@@ -30,7 +59,7 @@ export default async function ReportsPage() {
     }),
     getProjectsList(user),
     prisma.user.findMany({
-      where: { status: { not: "INACTIVE" } },
+      where: scopedUserWhere,
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -50,6 +79,11 @@ export default async function ReportsPage() {
       select: { id: true, name: true },
     }),
   ]);
+
+  // For Managers, only show departments represented in their project team
+  const departments = isAdmin
+    ? allDepartments
+    : allDepartments.filter((d) => users.some((u) => u.departmentId === d.id));
 
   const todayStart = startOfDay(new Date());
   const totalTasks = tasks.length;

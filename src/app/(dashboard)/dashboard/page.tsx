@@ -46,26 +46,33 @@ export default async function DashboardPage() {
       : Promise.resolve(0),
   ]);
 
+  const isAdmin = user.role === "ADMIN";
+  const isEmployee = user.role === "EMPLOYEE";
+
   const kpis = [
+    ...(!isEmployee
+      ? [
+          {
+            label: isAdmin ? "Total Employees" : "Project Members",
+            value: data.stats.totalEmployees,
+            icon: Users,
+            href: "/team",
+            accent: "text-[#635BDB]",
+          },
+        ]
+      : []),
     {
-      label: "Total Employees",
-      value: data.stats.totalEmployees,
-      icon: Users,
-      href: "/team",
-      accent: "text-[#635BDB]",
-    },
-    {
-      label: "Active Projects",
+      label: isAdmin ? "Active Projects" : "My Active Projects",
       value: data.stats.activeProjects,
       icon: FolderKanban,
       href: "/projects",
       accent: "text-[#3B82F6]",
     },
     {
-      label: "Total Tasks",
+      label: isEmployee ? "My Tasks" : isAdmin ? "Total Tasks" : "Project Tasks",
       value: data.stats.totalTasks,
       icon: ListTodo,
-      href: "/tasks",
+      href: isEmployee ? "/tasks?scope=mine" : "/tasks",
       accent: "text-[#20232B]",
     },
     {
@@ -73,21 +80,21 @@ export default async function DashboardPage() {
       value: data.stats.completedTasks,
       sub: `${data.stats.completionRate}% rate`,
       icon: CheckCircle2,
-      href: "/tasks?status=DONE",
+      href: isEmployee ? "/tasks?scope=mine&status=DONE" : "/tasks?status=DONE",
       accent: "text-[#16A34A]",
     },
     {
       label: "Pending Tasks",
       value: data.stats.pendingTasks,
       icon: Clock,
-      href: "/tasks",
+      href: isEmployee ? "/tasks?scope=mine" : "/tasks",
       accent: "text-[#F59E0B]",
     },
     {
       label: "Overdue",
       value: data.stats.overdueTasks,
       icon: AlertTriangle,
-      href: "/tasks",
+      href: isEmployee ? "/tasks?scope=mine" : "/tasks",
       accent: data.stats.overdueTasks > 0 ? "text-[#EF4444]" : "text-[#737987]",
     },
   ];
@@ -124,31 +131,47 @@ export default async function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h1 className="text-[24px] font-semibold tracking-tight text-[#20232B]">
-            Company Overview
+            {isAdmin
+              ? "Company Overview"
+              : isEmployee
+              ? "My Overview"
+              : "Projects Overview"}
           </h1>
           <p className="text-[13px] text-[#737987] mt-0.5">
-            Welcome back, {user.name.split(" ")[0]}. Here is live delivery status across your workspace.
+            Welcome back, {user.name.split(" ")[0]}.{" "}
+            {isAdmin
+              ? "Here is live delivery status across the entire company."
+              : isEmployee
+              ? "Here is your personal work progress and upcoming deadlines."
+              : "Here is live delivery status across your assigned projects."}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href="/my-tasks"
+            href="/tasks?scope=mine"
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#EAECF0] bg-white px-3 text-xs font-medium text-[#20232B] hover:bg-[#F7F8FA] transition-colors"
           >
             My Tasks
             <ArrowRight className="h-3.5 w-3.5 text-[#737987]" />
           </Link>
-          <Link
-            href="/reports"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#EAECF0] bg-white px-3 text-xs font-medium text-[#20232B] hover:bg-[#F7F8FA] transition-colors"
-          >
-            Full Reports
-          </Link>
+          {!isEmployee && (
+            <Link
+              href="/reports"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#EAECF0] bg-white px-3 text-xs font-medium text-[#20232B] hover:bg-[#F7F8FA] transition-colors"
+            >
+              {isAdmin ? "Full Reports" : "Project Reports"}
+            </Link>
+          )}
         </div>
       </div>
 
       {/* Compact KPI Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div
+        className={cn(
+          "grid grid-cols-2 md:grid-cols-3 gap-3",
+          isEmployee ? "xl:grid-cols-5" : "xl:grid-cols-6"
+        )}
+      >
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -377,17 +400,23 @@ export default async function DashboardPage() {
           <Card className="lg:col-span-6">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
-                <CardTitle>Employee Workload</CardTitle>
+                <CardTitle>
+                  {isAdmin ? "Employee Workload" : "Project Team Workload"}
+                </CardTitle>
                 <p className="text-xs text-[#737987] mt-0.5">
-                  Active vs. completed assignments per team member
+                  {isAdmin
+                    ? "Active vs. completed assignments per team member"
+                    : "Assignments across your project team members"}
                 </p>
               </div>
-              <Link
-                href="/team"
-                className="text-xs font-medium text-[#635BDB] hover:text-[#5148C9]"
-              >
-                Manage team
-              </Link>
+              {isAdmin && (
+                <Link
+                  href="/team"
+                  className="text-xs font-medium text-[#635BDB] hover:text-[#5148C9]"
+                >
+                  Manage team
+                </Link>
+              )}
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y divide-[#EAECF0] border-t border-[#EAECF0]">

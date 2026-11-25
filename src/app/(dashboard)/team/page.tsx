@@ -30,10 +30,16 @@ export default async function TeamPage({
   const role = params.role || "ALL";
   const status = params.status || "ALL";
 
+  const isAdmin = user.role === "ADMIN";
   const where: Prisma.UserWhereInput = {};
+  if (!isAdmin) {
+    // Non-admins only see active approved teammates (never pending/deactivated accounts)
+    where.status = "ACTIVE";
+  } else if (status !== "ALL") {
+    where.status = status as UserStatus;
+  }
   if (dept !== "ALL") where.departmentId = dept;
   if (role !== "ALL") where.role = role as Role;
-  if (status !== "ALL") where.status = status as UserStatus;
   if (q) {
     where.OR = [
       { name: { contains: q } },

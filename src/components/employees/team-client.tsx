@@ -363,45 +363,47 @@ export function TeamClient({
         </div>
       )}
 
-      {/* Compact Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
-          <div className="flex items-center justify-between text-xs text-[#737987]">
-            <span>Total Directory</span>
-            <Users className="h-4 w-4 text-[#635BDB]" />
+      {/* Admin-only Company Directory KPIs */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
+            <div className="flex items-center justify-between text-xs text-[#737987]">
+              <span>Total Directory</span>
+              <Users className="h-4 w-4 text-[#635BDB]" />
+            </div>
+            <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
+              {totalUsersCount}
+            </p>
           </div>
-          <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
-            {totalUsersCount}
-          </p>
-        </div>
-        <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
-          <div className="flex items-center justify-between text-xs text-[#737987]">
-            <span>Approved &amp; Active</span>
-            <span className="h-2.5 w-2.5 rounded-full bg-[#16A34A]" />
+          <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
+            <div className="flex items-center justify-between text-xs text-[#737987]">
+              <span>Approved &amp; Active</span>
+              <span className="h-2.5 w-2.5 rounded-full bg-[#16A34A]" />
+            </div>
+            <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
+              {activeCount}
+            </p>
           </div>
-          <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
-            {activeCount}
-          </p>
-        </div>
-        <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
-          <div className="flex items-center justify-between text-xs text-[#737987]">
-            <span>On Hold (Pending)</span>
-            <Clock className="h-4 w-4 text-[#F59E0B]" />
+          <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
+            <div className="flex items-center justify-between text-xs text-[#737987]">
+              <span>On Hold (Pending)</span>
+              <Clock className="h-4 w-4 text-[#F59E0B]" />
+            </div>
+            <p className="mt-1.5 text-2xl font-semibold text-[#F59E0B]">
+              {pendingEmployees.length}
+            </p>
           </div>
-          <p className="mt-1.5 text-2xl font-semibold text-[#F59E0B]">
-            {pendingEmployees.length}
-          </p>
-        </div>
-        <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
-          <div className="flex items-center justify-between text-xs text-[#737987]">
-            <span>Admins &amp; Managers</span>
-            <ShieldCheck className="h-4 w-4 text-[#3B82F6]" />
+          <div className="rounded-lg border border-[#EAECF0] bg-white p-4 shadow-subtle">
+            <div className="flex items-center justify-between text-xs text-[#737987]">
+              <span>Admins &amp; Managers</span>
+              <ShieldCheck className="h-4 w-4 text-[#3B82F6]" />
+            </div>
+            <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
+              {managersCount}
+            </p>
           </div>
-          <p className="mt-1.5 text-2xl font-semibold text-[#20232B]">
-            {managersCount}
-          </p>
         </div>
-      </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2.5">
