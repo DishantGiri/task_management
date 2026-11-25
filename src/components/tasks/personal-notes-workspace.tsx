@@ -620,6 +620,14 @@ export function PersonalNotesWorkspace({
   const [shareSearch, setShareSearch] = useState("");
   const [savingShares, setSavingShares] = useState(false);
 
+  // Custom Link & Image modal state (replaces native window.prompt)
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkUrlInput, setLinkUrlInput] = useState("");
+  const [linkHadExisting, setLinkHadExisting] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState("");
+  const [unsavedCloseOpen, setUnsavedCloseOpen] = useState(false);
+
   const openNote = useMemo(
     () => notes.find((n) => n.id === openNoteId) ?? null,
     [notes, openNoteId]
@@ -784,7 +792,26 @@ export function PersonalNotesWorkspace({
             .then((r) => (r.ok ? r.json() : null))
             .then((meta) => {
               const liveEditor = editorRef.current;
-              if (!liveEditor || !meta) return;
+              if (!liveEditor) return;
+
+              if (!meta) {
+                liveEditor.state.doc.descendants((node, pos) => {
+                  if (
+                    node.type.name === "linkPreview" &&
+                    node.attrs.url === text &&
+                    node.attrs.description === "Loading link preview..."
+                  ) {
+                    const tr = liveEditor.state.tr.setNodeMarkup(pos, undefined, {
+                      ...node.attrs,
+                      description: "",
+                    });
+                    liveEditor.view.dispatch(tr);
+                    return false;
+                  }
+                  return true;
+                });
+                return;
+              }
 
               // If the URL turned out to be an image response, replace with inline image
               if (meta.isImage && meta.image) {
@@ -1050,13 +1077,31 @@ export function PersonalNotesWorkspace({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [autoSave, openNote, hasUnsaved, draftTitle, draftContent]);
 
-  // Sync any pending changes silently when closing the note
+  // Prompt if there are unsaved changes when clicking "Back to Notes"
   const handleCloseNote = useCallback(() => {
-    if (openNote && openNote.canEdit && autoSave && hasUnsaved) {
-      void handleSave({ silent: true });
+    if (openNote && openNote.canEdit && hasUnsaved) {
+      setUnsavedCloseOpen(true);
+      return;
     }
     setOpenNoteId(null);
-  }, [openNote, autoSave, hasUnsaved, handleSave]);
+  }, [openNote, hasUnsaved]);
+
+  const handleSaveAndClose = useCallback(async () => {
+    const ok = await handleSave();
+    if (ok) {
+      setUnsavedCloseOpen(false);
+      setOpenNoteId(null);
+    }
+  }, [handleSave]);
+
+  const handleDiscardAndClose = useCallback(() => {
+    if (openNote) {
+      clearLocalDraft(openNote.id);
+    }
+    setHasUnsaved(false);
+    setUnsavedCloseOpen(false);
+    setOpenNoteId(null);
+  }, [openNote]);
 
   // Lock background scroll while full-screen note editor is open
   useEffect(() => {
@@ -1182,38 +1227,58 @@ export function PersonalNotesWorkspace({
   const handleSetLink = () => {
     if (!editor) return;
     const previousUrl = editor.getAttributes("link").href || "";
-    const url = window.prompt(
-      "Enter URL (leave empty to remove link):",
-      previousUrl
-    );
-    if (url === null) return;
-    if (url.trim() === "") {
+    setLinkUrlInput(previousUrl);
+    setLinkHadExisting(Boolean(previousUrl));
+    setLinkDialogOpen(true);
+  };
+
+  const handleApplyLink = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!editor) return;
+    const trimmed = linkUrlInput.trim();
+    if (trimmed === "") {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      setLinkDialogOpen(false);
       return;
     }
-    const safeUrl = /^https?:\/\//i.test(url.trim())
-      ? url.trim()
-      : `https://${url.trim()}`;
+    const safeUrl = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
     editor
       .chain()
       .focus()
       .extendMarkRange("link")
       .setLink({ href: safeUrl })
       .run();
+    setLinkDialogOpen(false);
+  };
+
+  const handleRemoveLink = () => {
+    if (!editor) return;
+    editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    setLinkDialogOpen(false);
   };
 
   const handleInsertImage = () => {
     if (!editor) return;
-    const url = window.prompt("Paste image URL (https://...):");
-    if (!url || !url.trim()) return;
-    const safeUrl = /^https?:\/\//i.test(url.trim())
-      ? url.trim()
-      : `https://${url.trim()}`;
+    setImageUrlInput("");
+    setImageDialogOpen(true);
+  };
+
+  const handleApplyImage = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!editor) return;
+    const trimmed = imageUrlInput.trim();
+    if (!trimmed) return;
+    const safeUrl = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
     editor
       .chain()
       .focus()
       .insertContent({ type: "image", attrs: { src: safeUrl, alt: "Image" } })
       .run();
+    setImageDialogOpen(false);
   };
 
   const myCount = notes.filter((n) => n.isOwner).length;
@@ -2081,6 +2146,178 @@ export function PersonalNotesWorkspace({
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               )}
               Save Sharing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Custom Add / Edit Link Dialog */}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleApplyLink} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <LinkIcon className="h-4 w-4 text-[#635BDB]" />
+                {linkHadExisting ? "Edit Link" : "Insert Link"}
+              </DialogTitle>
+              <DialogDescription>
+                Add or update a URL for the selected text.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="note-link-url"
+                className="text-xs font-medium text-[#525866]"
+              >
+                Destination URL
+              </label>
+              <input
+                id="note-link-url"
+                type="text"
+                autoFocus
+                value={linkUrlInput}
+                onChange={(e) => setLinkUrlInput(e.target.value)}
+                placeholder="https://example.com"
+                className="h-9 w-full rounded-md border border-[#E2E6EE] bg-white px-3 text-xs text-[#20232B] placeholder:text-[#9CA3AF] focus:border-[#635BDB] focus:outline-none focus:ring-2 focus:ring-[#635BDB]/20"
+              />
+            </div>
+
+            <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
+              <div>
+                {linkHadExisting && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveLink}
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                  >
+                    Remove Link
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLinkDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  {linkHadExisting ? "Update Link" : "Insert Link"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Custom Insert Image Dialog */}
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleApplyImage} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-[#635BDB]" />
+                Insert Image
+              </DialogTitle>
+              <DialogDescription>
+                Paste a direct image URL (or paste screenshots directly into the note).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="note-image-url"
+                className="text-xs font-medium text-[#525866]"
+              >
+                Image URL
+              </label>
+              <input
+                id="note-image-url"
+                type="text"
+                autoFocus
+                value={imageUrlInput}
+                onChange={(e) => setImageUrlInput(e.target.value)}
+                placeholder="https://images.unsplash.com/..."
+                className="h-9 w-full rounded-md border border-[#E2E6EE] bg-white px-3 text-xs text-[#20232B] placeholder:text-[#9CA3AF] focus:border-[#635BDB] focus:outline-none focus:ring-2 focus:ring-[#635BDB]/20"
+              />
+              {imageUrlInput.trim() && /^https?:\/\//i.test(imageUrlInput.trim()) && (
+                <div className="rounded-lg border border-[#EAECF0] bg-[#F7F8FA] p-2">
+                  <img
+                    src={imageUrlInput.trim()}
+                    alt="Preview"
+                    className="max-h-40 w-full rounded object-contain"
+                  />
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setImageDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!imageUrlInput.trim()}
+              >
+                Insert Image
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {/* Unsaved Changes Confirmation Dialog on Back to Notes */}
+      <Dialog open={unsavedCloseOpen} onOpenChange={setUnsavedCloseOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes in{" "}
+              <strong className="text-[#20232B]">
+                {draftTitle.trim() || "Untitled Note"}
+              </strong>
+              . Would you like to save before leaving?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              onClick={() => setUnsavedCloseOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              onClick={handleDiscardAndClose}
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+            >
+              Don&apos;t Save &amp; Close
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={saving}
+              onClick={handleSaveAndClose}
+            >
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Save &amp; Close
             </Button>
           </DialogFooter>
         </DialogContent>
