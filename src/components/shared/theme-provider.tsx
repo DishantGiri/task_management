@@ -7,32 +7,43 @@ import {
   useEffect,
   useState,
 } from "react";
-import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
+import { flushSync } from "react-dom";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  ThemeSwitcher,
+  type ThemeChoice,
+} from "@/components/ui/theme-switcher";
 
-export type ThemeMode = "light" | "dark";
+export type ThemeMode = ThemeChoice;
 
 interface ThemeContextValue {
   theme: ThemeMode;
+  resolvedTheme: "light" | "dark";
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "light",
+  theme: "system",
+  resolvedTheme: "light",
   setTheme: () => {},
   toggleTheme: () => {},
 });
 
 const STORAGE_KEY = "meridian-theme";
 
-function applyThemeClass(mode: ThemeMode) {
+function resolveTheme(mode: ThemeMode): "light" | "dark" {
+  if (mode === "light" || mode === "dark") return mode;
+  if (typeof window !== "undefined") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  return "light";
+}
+
+function applyResolvedTheme(resolved: "light" | "dark") {
   const root = document.documentElement;
-  if (mode === "dark") {
+  if (resolved === "dark") {
     root.classList.add("dark");
     root.style.colorScheme = "dark";
   } else {
@@ -42,52 +53,75 @@ function applyThemeClass(mode: ThemeMode) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>("light");
+  const [theme, setThemeState] = useState<ThemeMode>("system");
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved === "dark" || saved === "light") {
-        setThemeState(saved);
-        applyThemeClass(saved);
-        return;
-      }
-      const prefersDark = window.matchMedia(
-        "(prefers-color-scheme: dark)"
-      ).matches;
-      const initial: ThemeMode = prefersDark ? "dark" : "light";
+      const initial: ThemeMode =
+        saved === "dark" || saved === "light" || saved === "system"
+          ? saved
+          : "system";
+      const resolved = resolveTheme(initial);
       setThemeState(initial);
-      applyThemeClass(initial);
+      setResolvedTheme(resolved);
+      applyResolvedTheme(resolved);
     } catch {
       // ignore storage errors
     }
   }, []);
 
-  const setTheme = useCallback((next: ThemeMode) => {
-    setThemeState(next);
-    applyThemeClass(next);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // ignore
-    }
-  }, []);
+  // Keep OS system theme in sync when mode === "system"
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      const resolved = mq.matches ? "dark" : "light";
+      setResolvedTheme(resolved);
+      applyResolvedTheme(resolved);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme]);
 
-  const toggleTheme = useCallback(() => {
-    setThemeState((prev) => {
-      const next: ThemeMode = prev === "dark" ? "light" : "dark";
-      applyThemeClass(next);
+  const setTheme = useCallback((next: ThemeMode) => {
+    const nextResolved = resolveTheme(next);
+    const currentResolved = document.documentElement.classList.contains("dark")
+      ? "dark"
+      : "light";
+
+    const commit = () => {
+      setThemeState(next);
+      setResolvedTheme(nextResolved);
+      applyResolvedTheme(nextResolved);
       try {
         window.localStorage.setItem(STORAGE_KEY, next);
       } catch {
         // ignore
       }
-      return next;
-    });
+    };
+
+    if (
+      nextResolved !== currentResolved &&
+      typeof document.startViewTransition === "function"
+    ) {
+      document.startViewTransition(() => {
+        flushSync(commit);
+      });
+    } else {
+      commit();
+    }
   }, []);
 
+  const toggleTheme = useCallback(() => {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  }, [resolvedTheme, setTheme]);
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{ theme, resolvedTheme, setTheme, toggleTheme }}
+    >
       {children}
       {/* Subtle tactile film grain overlay active only in dark mode */}
       <div
@@ -104,25 +138,6 @@ export function useTheme() {
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const isDark = theme === "dark";
 
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex">
-          <AnimatedThemeToggler
-            theme={theme}
-            onThemeChange={setTheme}
-            duration={450}
-            variant="circle"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-[#F3F4F6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#635BDB]/40"
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">
-        {isDark ? "Switch to light mode" : "Switch to dark mode"}
-      </TooltipContent>
-    </Tooltip>
-  );
+  return <ThemeSwitcher value={theme} onChange={setTheme} />;
 }
