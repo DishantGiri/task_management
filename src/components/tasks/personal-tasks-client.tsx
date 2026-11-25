@@ -586,15 +586,15 @@ export function PersonalTasksClient({
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-[24px] font-semibold tracking-tight text-[#20232B]">
-              Personal Tasks
+              My To-Dos
             </h1>
             <span className="inline-flex items-center gap-1 rounded-md border border-[#EAECF0] bg-white px-2 py-0.5 text-[11px] font-medium text-[#737987] shadow-subtle">
               <Lock className="h-3 w-3 text-[#635BDB]" />
-              Private workspace
+              Private to you
             </span>
           </div>
           <p className="text-[13px] text-[#737987] mt-0.5">
-            Manage your private to-dos, daily focus blocks, personal checklists, and scratchpad notes.
+            Your private checklist and daily focus board — separate from company project tasks.
           </p>
         </div>
 

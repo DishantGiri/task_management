@@ -82,19 +82,60 @@ interface SearchResults {
   }[];
 }
 
-const NAV_ITEMS = [
-  { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { label: "My Tasks", href: "/my-tasks", icon: CheckSquare },
-  { label: "Personal Tasks", href: "/personal-tasks", icon: BookmarkCheck },
-  { label: "Notes", href: "/notes", icon: StickyNote },
-  { label: "Inbox", href: "/inbox", icon: Inbox, showBadge: true },
-  { label: "Projects", href: "/projects", icon: FolderKanban },
-  { label: "All Tasks", href: "/tasks", icon: ListTodo },
-  { label: "Calendar", href: "/calendar", icon: Calendar },
-  { label: "Team", href: "/team", icon: Users },
-  { label: "Departments", href: "/departments", icon: Building2 },
-  { label: "Reports", href: "/reports", icon: BarChart3 },
-  { label: "Settings", href: "/settings", icon: Settings },
+interface NavItem {
+  label: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  showBadge?: boolean;
+  matchPrefixes?: string[];
+  roles?: ("ADMIN" | "MANAGER" | "EMPLOYEE")[];
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    title: "Workspace",
+    items: [
+      { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Projects", href: "/projects", icon: FolderKanban },
+      {
+        label: "Tasks",
+        href: "/tasks",
+        icon: ListTodo,
+        matchPrefixes: ["/my-tasks", "/calendar"],
+      },
+      { label: "Inbox", href: "/inbox", icon: Inbox, showBadge: true },
+    ],
+  },
+  {
+    title: "Personal",
+    items: [
+      { label: "My To-Dos", href: "/personal-tasks", icon: BookmarkCheck },
+      { label: "Notes", href: "/notes", icon: StickyNote },
+    ],
+  },
+  {
+    title: "Organization",
+    items: [
+      {
+        label: "Team",
+        href: "/team",
+        icon: Users,
+        matchPrefixes: ["/departments"],
+      },
+      {
+        label: "Reports",
+        href: "/reports",
+        icon: BarChart3,
+        roles: ["ADMIN", "MANAGER"],
+      },
+      { label: "Settings", href: "/settings", icon: Settings },
+    ],
+  },
 ];
 
 export function AppShell({
@@ -184,12 +225,16 @@ export function AppShell({
   // Warm the Next.js router cache for all primary sidebar routes
   useEffect(() => {
     const timer = setTimeout(() => {
-      for (const item of NAV_ITEMS) {
-        router.prefetch(item.href);
+      for (const section of NAV_SECTIONS) {
+        for (const item of section.items) {
+          if (!item.roles || item.roles.includes(user.role)) {
+            router.prefetch(item.href);
+          }
+        }
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [router]);
+  }, [router, user.role]);
 
   // Keyboard shortcut Cmd+K / Ctrl+K for global search
   useEffect(() => {
@@ -299,59 +344,85 @@ export function AppShell({
         )}
       </div>
 
-      {/* Navigation Links */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
-
-          const linkEl = (
-            <Link
-              key={item.href}
-              href={item.href}
-              prefetch={true}
-              onClick={() => isMobile && setMobileOpen(false)}
-              className={cn(
-                "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors",
-                collapsed && !isMobile ? "justify-center px-2" : "",
-                isActive
-                  ? "bg-[#F0EFFF] text-[#5148C9]"
-                  : "text-[#525866] hover:bg-[#F7F8FA] hover:text-[#20232B]"
-              )}
-            >
-              <Icon
-                className={cn(
-                  "h-4 w-4 shrink-0",
-                  isActive
-                    ? "text-[#635BDB]"
-                    : "text-[#737987] group-hover:text-[#20232B]"
-                )}
-              />
-              {(!collapsed || isMobile) && (
-                <>
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {item.showBadge && unreadCount > 0 && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#635BDB] px-1.5 text-[10px] font-semibold text-white">
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
-                  )}
-                </>
-              )}
-            </Link>
+      {/* Navigation Links Grouped by Section */}
+      <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4">
+        {NAV_SECTIONS.map((section, sectionIdx) => {
+          const visibleItems = section.items.filter(
+            (item) => !item.roles || item.roles.includes(user.role)
           );
+          if (visibleItems.length === 0) return null;
 
-          if (collapsed && !isMobile) {
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
-                <TooltipContent side="right">{item.label}</TooltipContent>
-              </Tooltip>
-            );
-          }
+          return (
+            <div key={section.title} className="space-y-0.5">
+              {!collapsed || isMobile ? (
+                <div className="px-2.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+                  {section.title}
+                </div>
+              ) : sectionIdx > 0 ? (
+                <div className="mx-2 my-1.5 h-px bg-[#EAECF0]" />
+              ) : null}
 
-          return linkEl;
+              {visibleItems.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== "/dashboard" &&
+                    pathname.startsWith(`${item.href}/`)) ||
+                  Boolean(
+                    item.matchPrefixes?.some(
+                      (prefix) =>
+                        pathname === prefix || pathname.startsWith(`${prefix}/`)
+                    )
+                  );
+
+                const linkEl = (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    prefetch={true}
+                    onClick={() => isMobile && setMobileOpen(false)}
+                    className={cn(
+                      "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors",
+                      collapsed && !isMobile ? "justify-center px-2" : "",
+                      isActive
+                        ? "bg-[#F0EFFF] text-[#5148C9]"
+                        : "text-[#525866] hover:bg-[#F7F8FA] hover:text-[#20232B]"
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        isActive
+                          ? "text-[#635BDB]"
+                          : "text-[#737987] group-hover:text-[#20232B]"
+                      )}
+                    />
+                    {(!collapsed || isMobile) && (
+                      <>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {item.showBadge && unreadCount > 0 && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#635BDB] px-1.5 text-[10px] font-semibold text-white">
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </Link>
+                );
+
+                if (collapsed && !isMobile) {
+                  return (
+                    <Tooltip key={item.href}>
+                      <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
+                      <TooltipContent side="right">{item.label}</TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                return linkEl;
+              })}
+            </div>
+          );
         })}
 
         {/* Active Projects Quick Jump */}

@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  Building2,
   CheckCircle2,
   Clock,
   Loader2,
@@ -193,10 +195,10 @@ export function TeamClient({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-[24px] font-semibold tracking-tight text-[#20232B]">
-            Team &amp; Employees
+            Team
           </h1>
           <p className="text-[13px] text-[#737987] mt-0.5">
-            Approve Google sign-ins, assign roles, and manage organization workload.
+            Manage team members, roles, approvals, and company departments.
           </p>
         </div>
 
@@ -212,6 +214,24 @@ export function TeamClient({
             Pre-Approve Gmail User
           </Button>
         )}
+      </div>
+
+      {/* Unified Team Sub-Navigation: Members | Departments */}
+      <div className="inline-flex items-center rounded-md border border-[#EAECF0] bg-white p-0.5 shadow-subtle">
+        <Link
+          href="/team"
+          className="inline-flex items-center gap-1.5 rounded-[5px] bg-[#F0EFFF] px-3 py-1.5 text-xs font-semibold text-[#5148C9]"
+        >
+          <Users className="h-3.5 w-3.5" />
+          Members
+        </Link>
+        <Link
+          href="/departments"
+          className="inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium text-[#737987] hover:text-[#20232B] transition-colors"
+        >
+          <Building2 className="h-3.5 w-3.5" />
+          Departments
+        </Link>
       </div>
 
       {/* Admin Approval Queue Banner for Users On Hold */}

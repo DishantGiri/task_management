@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2,
@@ -194,7 +195,7 @@ export function DepartmentsClient({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-[24px] font-semibold tracking-tight text-[#20232B]">
-            Department Management
+            Team
           </h1>
           <p className="text-[13px] text-[#737987] mt-0.5">
             Create, edit, and organize company departments and assign team members.
@@ -213,6 +214,24 @@ export function DepartmentsClient({
             New Department
           </Button>
         )}
+      </div>
+
+      {/* Unified Team Sub-Navigation: Members | Departments */}
+      <div className="inline-flex items-center rounded-md border border-[#EAECF0] bg-white p-0.5 shadow-subtle">
+        <Link
+          href="/team"
+          className="inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium text-[#737987] hover:text-[#20232B] transition-colors"
+        >
+          <Users className="h-3.5 w-3.5" />
+          Members
+        </Link>
+        <Link
+          href="/departments"
+          className="inline-flex items-center gap-1.5 rounded-[5px] bg-[#F0EFFF] px-3 py-1.5 text-xs font-semibold text-[#5148C9]"
+        >
+          <Building2 className="h-3.5 w-3.5" />
+          Departments
+        </Link>
       </div>
 
       {/* KPI Strip */}
