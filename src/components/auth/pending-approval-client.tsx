@@ -46,8 +46,13 @@ export function PendingApprovalClient({ user }: { user: SessionUser }) {
         <div className="flex items-center justify-center mb-7">
           <img
             src="/logo.png"
-            alt="Meridian — Acme Enterprise"
-            className="h-12 w-auto object-contain"
+            alt="Lakshya — Plan · Organize · Achieve"
+            className="h-12 w-auto object-contain dark:hidden"
+          />
+          <img
+            src="/logo-dark.png"
+            alt="Lakshya — Plan · Organize · Achieve"
+            className="hidden h-12 w-auto object-contain dark:block"
           />
         </div>
 

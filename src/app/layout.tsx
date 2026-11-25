@@ -8,9 +8,9 @@ import "./globals.css";
 const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem("meridian-theme");var d=s==="dark"||(s!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark";}else{document.documentElement.classList.remove("dark");document.documentElement.style.colorScheme="light";}}catch(e){}})();`;
 
 export const metadata: Metadata = {
-  title: "Meridian — Company Work Management",
+  title: "Lakshya — Plan · Organize · Achieve",
   description:
-    "Modern enterprise work management platform for projects, tasks, personal tasks, subtasks, teams, and delivery insights.",
+    "Modern company work management platform for projects, tasks, personal to-dos, notes, teams, and delivery insights.",
   icons: {
     icon: "/logo-icon.png",
   },

@@ -346,15 +346,22 @@ export function AppShell({
           {collapsed && !isMobile ? (
             <img
               src="/logo-icon.png"
-              alt="Meridian"
-              className="h-7 w-auto object-contain shrink-0"
+              alt="Lakshya"
+              className="h-7 w-7 object-contain shrink-0"
             />
           ) : (
-            <img
-              src="/logo.png"
-              alt="Meridian — Acme Enterprise"
-              className="h-9 w-auto max-w-[168px] object-contain dark:invert dark:hue-rotate-180"
-            />
+            <>
+              <img
+                src="/logo.png"
+                alt="Lakshya — Plan · Organize · Achieve"
+                className="h-9 w-auto max-w-[180px] object-contain dark:hidden"
+              />
+              <img
+                src="/logo-dark.png"
+                alt="Lakshya — Plan · Organize · Achieve"
+                className="hidden h-9 w-auto max-w-[180px] object-contain dark:block"
+              />
+            </>
           )}
         </Link>
 

@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       const res = await fetch(parsed.toString(), {
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (compatible; MeridianLinkPreview/1.0; +https://meridian.dailyworkreport.com)",
+            "Mozilla/5.0 (compatible; LakshyaLinkPreview/1.0)",
           Accept: "text/html,application/xhtml+xml",
         },
         redirect: "follow",
