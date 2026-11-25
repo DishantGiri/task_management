@@ -93,6 +93,7 @@ interface ShareableUser {
   email: string;
   avatarUrl: string | null;
   designation: string | null;
+  department?: { id: string; name: string } | null;
 }
 
 const NoteImage = Node.create({
@@ -638,6 +639,7 @@ export function PersonalNotesWorkspace({
     Record<string, { selected: boolean; canEdit: boolean }>
   >({});
   const [shareSearch, setShareSearch] = useState("");
+  const [shareDeptFilter, setShareDeptFilter] = useState<string>("ALL");
   const [savingShares, setSavingShares] = useState(false);
 
   // Custom Link & Image modal state (replaces native window.prompt)
@@ -1214,6 +1216,7 @@ export function PersonalNotesWorkspace({
     }
     setShareDraft(draft);
     setShareSearch("");
+    setShareDeptFilter("ALL");
     setShareModalNote(note);
   };
 
@@ -1334,16 +1337,78 @@ export function PersonalNotesWorkspace({
     safePage * PAGE_SIZE
   );
 
+  const shareDepartments = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    let unassignedCount = 0;
+    for (const u of shareableUsers) {
+      if (u.department) {
+        const existing = map.get(u.department.id);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          map.set(u.department.id, {
+            id: u.department.id,
+            name: u.department.name,
+            count: 1,
+          });
+        }
+      } else {
+        unassignedCount += 1;
+      }
+    }
+    const list = Array.from(map.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+    return { list, unassignedCount };
+  }, [shareableUsers]);
+
   const filteredShareUsers = useMemo(() => {
     const q = shareSearch.trim().toLowerCase();
-    if (!q) return shareableUsers;
-    return shareableUsers.filter(
-      (u) =>
+    return shareableUsers.filter((u) => {
+      if (shareDeptFilter === "UNASSIGNED" && u.department) return false;
+      if (
+        shareDeptFilter !== "ALL" &&
+        shareDeptFilter !== "UNASSIGNED" &&
+        u.department?.id !== shareDeptFilter
+      ) {
+        return false;
+      }
+      if (!q) return true;
+      return (
         u.name.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
-        (u.designation || "").toLowerCase().includes(q)
-    );
-  }, [shareableUsers, shareSearch]);
+        (u.designation || "").toLowerCase().includes(q) ||
+        (u.department?.name || "").toLowerCase().includes(q)
+      );
+    });
+  }, [shareableUsers, shareSearch, shareDeptFilter]);
+
+  const totalSelectedShares = useMemo(
+    () => Object.values(shareDraft).filter((v) => v.selected).length,
+    [shareDraft]
+  );
+
+  const allFilteredSelected =
+    filteredShareUsers.length > 0 &&
+    filteredShareUsers.every((u) => shareDraft[u.id]?.selected);
+
+  const handleToggleSelectFiltered = () => {
+    setShareDraft((prev) => {
+      const next = { ...prev };
+      const shouldSelect = !allFilteredSelected;
+      for (const u of filteredShareUsers) {
+        next[u.id] = {
+          selected: shouldSelect,
+          canEdit: prev[u.id]?.canEdit ?? false,
+        };
+      }
+      return next;
+    });
+  };
+
+  const handleClearAllShares = () => {
+    setShareDraft({});
+  };
 
   const ToolbarBtn = ({
     active,
@@ -2056,15 +2121,91 @@ export function PersonalNotesWorkspace({
           </DialogHeader>
 
           <div className="space-y-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF]" />
-              <input
-                value={shareSearch}
-                onChange={(e) => setShareSearch(e.target.value)}
-                placeholder="Search teammates..."
-                className="h-8 w-full rounded-md border border-[#E2E6EE] pl-8 pr-3 text-xs focus:border-[#635BDB] focus:outline-none"
-              />
+            {/* Search & Department Filter */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF]" />
+                <input
+                  value={shareSearch}
+                  onChange={(e) => setShareSearch(e.target.value)}
+                  placeholder="Search teammates..."
+                  className="h-8 w-full rounded-md border border-[#E2E6EE] bg-white pl-8 pr-3 text-xs focus:border-[#635BDB] focus:outline-none"
+                />
+              </div>
+
+              <Select
+                value={shareDeptFilter}
+                onValueChange={setShareDeptFilter}
+              >
+                <SelectTrigger className="h-8 w-full sm:w-[165px] text-xs">
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">
+                    All Departments ({shareableUsers.length})
+                  </SelectItem>
+                  {shareDepartments.list.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} ({d.count})
+                    </SelectItem>
+                  ))}
+                  {shareDepartments.unassignedCount > 0 && (
+                    <SelectItem value="UNASSIGNED">
+                      No Department ({shareDepartments.unassignedCount})
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
+
+            {/* Bulk Select Bar (Select All by Department or All Employees) */}
+            {filteredShareUsers.length > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-[#EAECF0] bg-[#F7F8FA] px-3 py-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={handleToggleSelectFiltered}
+                  className="inline-flex items-center gap-2 font-medium text-[#20232B] hover:text-[#5148C9] transition-colors"
+                >
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                      allFilteredSelected
+                        ? "border-[#635BDB] bg-[#635BDB] text-white"
+                        : "border-[#D5D9E2] bg-white"
+                    )}
+                  >
+                    {allFilteredSelected && <Check className="h-3 w-3" />}
+                  </span>
+                  <span>
+                    {allFilteredSelected ? "Deselect" : "Select"}{" "}
+                    {shareDeptFilter === "ALL"
+                      ? `All Employees (${filteredShareUsers.length})`
+                      : shareDeptFilter === "UNASSIGNED"
+                      ? `Unassigned (${filteredShareUsers.length})`
+                      : `All in ${
+                          shareDepartments.list.find(
+                            (d) => d.id === shareDeptFilter
+                          )?.name ?? "Department"
+                        } (${filteredShareUsers.length})`}
+                  </span>
+                </button>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[#737987]">
+                    {totalSelectedShares} selected
+                  </span>
+                  {totalSelectedShares > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearAllShares}
+                      className="font-medium text-red-600 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="max-h-64 overflow-y-auto divide-y divide-[#F1F3F7] rounded-lg border border-[#EAECF0]">
               {filteredShareUsers.length === 0 ? (
@@ -2116,6 +2257,7 @@ export function PersonalNotesWorkspace({
                           </p>
                           <p className="truncate text-[10.5px] text-[#737987]">
                             {u.designation || u.email}
+                            {u.department ? ` · ${u.department.name}` : ""}
                           </p>
                         </div>
                       </button>

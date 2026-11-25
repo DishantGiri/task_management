@@ -51,6 +51,7 @@ export default async function NotesPage({
         email: true,
         avatarUrl: true,
         designation: true,
+        department: { select: { id: true, name: true } },
       },
     }),
   ]);
