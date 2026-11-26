@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getAuthenticatedUser } from "@/lib/permissions";
 import { getWorkspaceReferenceData } from "@/lib/queries";
 import { AppShell } from "@/components/layout/app-shell";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function DashboardLayout({
   children,
