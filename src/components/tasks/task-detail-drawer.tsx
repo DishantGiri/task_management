@@ -125,6 +125,15 @@ export function TaskDetailDrawer({
   const [subPriority, setSubPriority] = useState<Priority>("MEDIUM");
   const [subDueDate, setSubDueDate] = useState("");
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [subStatusFilter, setSubStatusFilter] = useState<string>("ALL");
+  const [subAssigneeFilter, setSubAssigneeFilter] = useState<string>("ALL");
+  const [pendingDeleteSubtask, setPendingDeleteSubtask] = useState<{
+    id: string;
+    taskKey: string;
+    title: string;
+    status: TaskStatus;
+  } | null>(null);
+  const [deletingSubtask, setDeletingSubtask] = useState(false);
 
   // Comment & drawer subsection state
   const [activeSection, setActiveSection] = useState<"details" | "comments">(
@@ -495,10 +504,6 @@ export function TaskDetailDrawer({
       toast.error("Subtask title must be 200 characters or fewer.");
       return;
     }
-    if (!subAssigneeId) {
-      toast.error("Please select an assignee for this subtask.");
-      return;
-    }
     setAddingSubtask(true);
     const res = await createTaskAction({
       title: trimmedTitle,
@@ -506,7 +511,10 @@ export function TaskDetailDrawer({
       parentId: task.id,
       status: "TODO",
       priority: subPriority,
-      assigneeId: subAssigneeId,
+      assigneeId:
+        subAssigneeId && subAssigneeId !== "__unassigned__"
+          ? subAssigneeId
+          : null,
       dueDate: subDueDate || null,
       collaboratorIds: [],
       tagIds: [],
@@ -527,13 +535,17 @@ export function TaskDetailDrawer({
     needsBoardRefreshRef.current = true;
   };
 
-  const handleDeleteSubtask = async (subId: string) => {
-    const res = await deleteTaskAction(subId);
+  const handleConfirmDeleteSubtask = async () => {
+    if (!pendingDeleteSubtask) return;
+    setDeletingSubtask(true);
+    const res = await deleteTaskAction(pendingDeleteSubtask.id);
+    setDeletingSubtask(false);
     if (res.error) {
       toast.error(res.error);
       return;
     }
-    toast.success("Subtask removed");
+    toast.success(`Subtask ${pendingDeleteSubtask.taskKey} removed`);
+    setPendingDeleteSubtask(null);
     if (task) await loadTask(task.id, { silent: true, preserveDraft: true });
     needsBoardRefreshRef.current = true;
   };
@@ -1228,14 +1240,80 @@ export function TaskDetailDrawer({
                     </div>
 
                     {totalSubtasks > 0 && (
-                      <div className="flex items-center gap-3">
-                        <Progress
-                          value={getDisplayTaskProgress(task)}
-                          className="h-1.5 flex-1"
-                        />
-                        <span className="text-[11px] font-medium text-[#737987]">
-                          {getDisplayTaskProgress(task)}% auto-calculated
-                        </span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <Progress
+                            value={getDisplayTaskProgress(task)}
+                            className="h-1.5 flex-1"
+                          />
+                          <span className="text-[11px] font-semibold text-[#20232B] shrink-0">
+                            {completedSubtasks} of {totalSubtasks} done ({getDisplayTaskProgress(task)}%)
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px]">
+                          <div className="flex flex-wrap items-center gap-2 text-[#737987]">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#16A34A]" />
+                              {completedSubtasks} Done
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
+                              {task.subtasks.filter((s) => s.status === "IN_PROGRESS" || s.status === "IN_REVIEW").length} Active
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              {task.subtasks.filter((s) => s.status === "TODO").length} To Do
+                            </span>
+                            {completedSubtasks === totalSubtasks && task.status !== "DONE" && (
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                Ready for final review
+                              </span>
+                            )}
+                          </div>
+
+                          {totalSubtasks >= 2 && (
+                            <div className="flex items-center gap-1.5">
+                              <Select
+                                value={subStatusFilter}
+                                onValueChange={setSubStatusFilter}
+                              >
+                                <SelectTrigger className="h-6 w-[104px] text-[10.5px] px-2">
+                                  <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ALL">All Statuses</SelectItem>
+                                  <SelectItem value="TODO">To Do</SelectItem>
+                                  <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                                  <SelectItem value="IN_REVIEW">In Review</SelectItem>
+                                  <SelectItem value="DONE">Done</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Select
+                                value={subAssigneeFilter}
+                                onValueChange={setSubAssigneeFilter}
+                              >
+                                <SelectTrigger className="h-6 w-[112px] text-[10.5px] px-2">
+                                  <SelectValue placeholder="Assignee" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ALL">All Assignees</SelectItem>
+                                  <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
+                                  {Array.from(
+                                    new Map(
+                                      task.subtasks
+                                        .filter((s) => s.assignee)
+                                        .map((s) => [s.assignee!.id, s.assignee!])
+                                    ).values()
+                                  ).map((u) => (
+                                    <SelectItem key={u.id} value={u.id}>
+                                      {u.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -1266,13 +1344,18 @@ export function TaskDetailDrawer({
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <Select
-                            value={subAssigneeId}
-                            onValueChange={setSubAssigneeId}
+                            value={subAssigneeId || "__unassigned__"}
+                            onValueChange={(v) =>
+                              setSubAssigneeId(v === "__unassigned__" ? "" : v)
+                            }
                           >
                             <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Assignee *" />
+                              <SelectValue placeholder="Assignee (optional)" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="__unassigned__">
+                                Unassigned
+                              </SelectItem>
                               {users.map((u) => (
                                 <SelectItem key={u.id} value={u.id}>
                                   {u.name}
@@ -1335,9 +1418,37 @@ export function TaskDetailDrawer({
                       </div>
                     ) : (
                       <div className="divide-y divide-[#EAECF0] rounded-lg border border-[#EAECF0] bg-white">
-                        {task.subtasks.map((sub) => {
+                        {task.subtasks
+                          .filter((sub) => {
+                            if (
+                              subStatusFilter !== "ALL" &&
+                              sub.status !== subStatusFilter
+                            ) {
+                              return false;
+                            }
+                            if (
+                              subAssigneeFilter === "UNASSIGNED" &&
+                              sub.assigneeId !== null
+                            ) {
+                              return false;
+                            }
+                            if (
+                              subAssigneeFilter !== "ALL" &&
+                              subAssigneeFilter !== "UNASSIGNED" &&
+                              sub.assigneeId !== subAssigneeFilter
+                            ) {
+                              return false;
+                            }
+                            return true;
+                          })
+                          .map((sub) => {
                           const isDone = sub.status === "DONE";
                           const overdue = isTaskOverdue(sub.dueDate, sub.status);
+                          const canDeleteThisSub =
+                            canUpdateStatus &&
+                            (!isDone ||
+                              currentUserRole === "ADMIN" ||
+                              currentUserRole === "MANAGER");
                           return (
                             <div
                               key={sub.id}
@@ -1429,10 +1540,17 @@ export function TaskDetailDrawer({
                                     size="xs"
                                   />
                                 )}
-                                {canUpdateStatus && (
+                                {canDeleteThisSub && (
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteSubtask(sub.id)}
+                                    onClick={() =>
+                                      setPendingDeleteSubtask({
+                                        id: sub.id,
+                                        taskKey: sub.taskKey,
+                                        title: sub.title,
+                                        status: sub.status,
+                                      })
+                                    }
                                     className="opacity-0 group-hover:opacity-100 rounded p-1 text-[#9CA3AF] hover:text-red-600 transition-opacity"
                                     title="Remove subtask"
                                   >
@@ -1853,6 +1971,58 @@ export function TaskDetailDrawer({
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Subtask Deletion Dialog (warns on In Progress / Done subtasks) */}
+      <Dialog
+        open={Boolean(pendingDeleteSubtask)}
+        onOpenChange={(o) => {
+          if (!o) setPendingDeleteSubtask(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Subtask</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <strong className="text-[#20232B]">
+                {pendingDeleteSubtask?.taskKey}: {pendingDeleteSubtask?.title}
+              </strong>
+              ?
+            </DialogDescription>
+          </DialogHeader>
+          {pendingDeleteSubtask &&
+            (pendingDeleteSubtask.status === "IN_PROGRESS" ||
+              pendingDeleteSubtask.status === "IN_REVIEW" ||
+              pendingDeleteSubtask.status === "DONE") && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {pendingDeleteSubtask.status === "DONE"
+                  ? "This subtask is already completed. Deleting it will recalculate the parent ticket's progress."
+                  : "This subtask is currently active/in progress. Deleting it will permanently remove its work record."}
+              </div>
+            )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={deletingSubtask}
+              onClick={() => setPendingDeleteSubtask(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deletingSubtask}
+              onClick={handleConfirmDeleteSubtask}
+            >
+              {deletingSubtask && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Delete Subtask
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

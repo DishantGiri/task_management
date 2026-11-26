@@ -83,21 +83,14 @@ export function getDisplayTaskProgress(task: {
   progress?: number | null;
   subtasks?: Array<{ status: string; progress?: number | null }>;
 }): number {
-  if (task.status === "DONE") return 100;
-
+  // When a parent ticket has subtasks, progress is strictly (DONE subtasks / total subtasks) * 100.
+  // Only DONE subtasks count; 100% progress does NOT auto-close the parent ticket.
   if (task.subtasks && task.subtasks.length > 0) {
     const doneCount = task.subtasks.filter((s) => s.status === "DONE").length;
-    const raw =
-      doneCount === task.subtasks.length
-        ? 100
-        : Math.round(
-            task.subtasks.reduce(
-              (sum, s) => sum + getStatusProgressScore(s.status),
-              0
-            ) / task.subtasks.length
-          );
-    return Math.min(raw, 90);
+    return Math.round((doneCount / task.subtasks.length) * 100);
   }
+
+  if (task.status === "DONE") return 100;
 
   if (Array.isArray(task.subtasks)) {
     return getStatusProgressScore(task.status);
@@ -105,7 +98,7 @@ export function getDisplayTaskProgress(task: {
 
   return Math.min(
     Math.max(task.progress ?? 0, getStatusProgressScore(task.status)),
-    90
+    100
   );
 }
 
@@ -153,8 +146,13 @@ export function validateTaskStatusTransition(params: {
 
   if (currentStatus === nextStatus) return null;
 
-  // 0. Cannot move a task out of To Do while it is unassigned
-  if (hasAssignee === false && currentStatus === "TODO" && nextStatus !== "TODO") {
+  // 0. Cannot move a parent ticket out of To Do while it is unassigned
+  if (
+    !isSubtask &&
+    hasAssignee === false &&
+    currentStatus === "TODO" &&
+    nextStatus !== "TODO"
+  ) {
     return "Please assign this task before changing its status.";
   }
 
@@ -204,7 +202,7 @@ export function validateTaskStatusTransition(params: {
     return "Only QA / Testers, Project Managers, or Admins can mark a task complete. Move it to In Review / QA for verification.";
   }
 
-  // 6. Only QA/Tester, Project Manager, or Admin can kick a task back from In Review / QA
+  // 6. Only QA/Tester, Project Manager, or Admin can kick a parent task back from In Review / QA
   if (
     !isSubtask &&
     currentStatus === "IN_REVIEW" &&
@@ -212,6 +210,11 @@ export function validateTaskStatusTransition(params: {
     !canMarkComplete
   ) {
     return "Only QA / Testers, Project Managers, or Admins can return a task from In Review / QA to In Progress.";
+  }
+
+  // 7. Only QA/Tester, Project Manager, or Admin can reopen a completed parent ticket
+  if (!isSubtask && currentStatus === "DONE" && nextStatus !== "DONE" && !canMarkComplete) {
+    return "Only Project Managers, Admins, or QA can reopen a completed parent ticket.";
   }
 
   return null;

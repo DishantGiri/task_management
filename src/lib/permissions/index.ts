@@ -314,59 +314,33 @@ export async function generateNextTaskKey(projectId: string): Promise<string> {
 
 export async function recalculateParentProgress(
   parentId: string | null | undefined
-): Promise<void> {
-  if (!parentId) return;
+): Promise<{ progress: number; completedCount: number; totalCount: number } | null> {
+  if (!parentId) return null;
 
   const subtasks = await prisma.task.findMany({
     where: { parentId },
-    select: { status: true, progress: true },
-  });
-
-  if (subtasks.length === 0) return;
-
-  const statusScore = (status: TaskStatus): number => {
-    switch (status) {
-      case "DONE":
-        return 100;
-      case "IN_REVIEW":
-        return 75;
-      case "IN_PROGRESS":
-        return 40;
-      default:
-        return 0;
-    }
-  };
-
-  const completedCount = subtasks.filter((s) => s.status === "DONE").length;
-  const weightedSum = subtasks.reduce(
-    (sum, s) =>
-      sum +
-      (s.status === "DONE" ? 100 : Math.max(s.progress, statusScore(s.status))),
-    0
-  );
-  const rawProgress =
-    completedCount === subtasks.length
-      ? 100
-      : Math.round(weightedSum / subtasks.length);
-
-  const currentParent = await prisma.task.findUnique({
-    where: { id: parentId },
     select: { status: true },
   });
 
-  // Never show 100% while the main task itself is not in DONE status
-  const progress =
-    currentParent?.status === "DONE" ? 100 : Math.min(rawProgress, 90);
+  if (subtasks.length === 0) {
+    await prisma.task.update({
+      where: { id: parentId },
+      data: { progress: 0 },
+    });
+    return { progress: 0, completedCount: 0, totalCount: 0 };
+  }
 
-  const parent = await prisma.task.update({
+  // Only DONE subtasks count toward parent completion percentage;
+  // parent status is NEVER automatically changed when progress reaches 100%.
+  const completedCount = subtasks.filter((s) => s.status === "DONE").length;
+  const progress = Math.round((completedCount / subtasks.length) * 100);
+
+  await prisma.task.update({
     where: { id: parentId },
     data: { progress },
-    select: { parentId: true },
   });
 
-  if (parent.parentId) {
-    await recalculateParentProgress(parent.parentId);
-  }
+  return { progress, completedCount, totalCount: subtasks.length };
 }
 
 export async function createActivityLog(params: {

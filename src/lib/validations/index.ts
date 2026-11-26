@@ -122,7 +122,7 @@ export const taskCreateSchema = z
     parentId: z.string().nullable().optional(),
     status: z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]).default("TODO"),
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
-    assigneeId: z.string().min(1, "Please select an assignee"),
+    assigneeId: z.string().nullable().optional(),
     collaboratorIds: z.array(z.string()).default([]),
     tagIds: z.array(z.string()).default([]),
     dependencyIds: z.array(z.string()).default([]),
@@ -141,6 +141,19 @@ export const taskCreateSchema = z
         message: "Due date cannot be in the past",
       }),
   })
+  .refine(
+    (data) => {
+      // Parent tickets require an assignee; subtasks may optionally be left unassigned
+      if (!data.parentId && (!data.assigneeId || !data.assigneeId.trim())) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Please select an assignee",
+      path: ["assigneeId"],
+    }
+  )
   .refine(
     (data) => {
       if (data.startDate && data.dueDate) {

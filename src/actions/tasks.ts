@@ -72,6 +72,31 @@ export async function createTaskAction(values: unknown) {
 
     const data = parsed.data;
 
+    // Validate parent ticket hierarchy & non-archived project for subtasks
+    if (data.parentId) {
+      const parentTicket = await prisma.task.findUnique({
+        where: { id: data.parentId },
+        select: {
+          id: true,
+          projectId: true,
+          parentId: true,
+          project: { select: { status: true } },
+        },
+      });
+      if (!parentTicket) {
+        return { error: "Parent ticket not found." };
+      }
+      if (parentTicket.projectId !== data.projectId) {
+        return { error: "Subtask must belong to the same project as its parent ticket." };
+      }
+      if (parentTicket.parentId) {
+        return { error: "Nested subtasks are not allowed. Subtasks can only belong to a parent ticket." };
+      }
+      if (parentTicket.project.status === "ARCHIVED") {
+        return { error: "Cannot add subtasks to a ticket in an archived project." };
+      }
+    }
+
     // Parallelize permission check, task key generation, and max position query!
     const [allowed, taskKey, maxPos] = await Promise.all([
       canCreateTaskInProject(user, data.projectId, data.parentId),
@@ -380,7 +405,61 @@ export async function updateTaskAction(values: unknown) {
     }
 
     if (existing.parentId) {
-      await recalculateParentProgress(existing.parentId);
+      const parentProgress = await recalculateParentProgress(existing.parentId);
+
+      // Spec Rule 6: When all subtasks reach DONE (100%), notify Project Manager & Parent Assignee
+      // without automatically closing the parent ticket.
+      if (
+        data.status === "DONE" &&
+        existing.status !== "DONE" &&
+        parentProgress &&
+        parentProgress.totalCount > 0 &&
+        parentProgress.progress === 100
+      ) {
+        const parentTask = await prisma.task.findUnique({
+          where: { id: existing.parentId },
+          select: {
+            id: true,
+            taskKey: true,
+            title: true,
+            status: true,
+            assigneeId: true,
+            project: {
+              select: {
+                managerId: true,
+                members: {
+                  where: { role: "LEAD" },
+                  select: { userId: true },
+                },
+              },
+            },
+          },
+        });
+
+        if (parentTask && parentTask.status !== "DONE") {
+          const notifyIds = new Set<string>();
+          if (parentTask.project.managerId)
+            notifyIds.add(parentTask.project.managerId);
+          if (parentTask.assigneeId) notifyIds.add(parentTask.assigneeId);
+          for (const lead of parentTask.project.members) {
+            notifyIds.add(lead.userId);
+          }
+
+          for (const recipientId of notifyIds) {
+            if (recipientId !== user.id) {
+              await createNotification({
+                userId: recipientId,
+                actorId: user.id,
+                type: "TASK_UPDATED",
+                title: `All subtasks complete: ${parentTask.taskKey}`,
+                message: `All ${parentProgress.totalCount}/${parentProgress.totalCount} subtasks on "${parentTask.title}" are Done (100%). Ready for final review and closure.`,
+                link: `/tasks?taskId=${parentTask.id}`,
+                taskId: parentTask.id,
+              });
+            }
+          }
+        }
+      }
     }
 
     // Activity & Notifications
@@ -479,6 +558,7 @@ export async function deleteTaskAction(taskId: string) {
         id: true,
         taskKey: true,
         title: true,
+        status: true,
         projectId: true,
         parentId: true,
         creatorId: true,
@@ -489,6 +569,18 @@ export async function deleteTaskAction(taskId: string) {
     const perm = await canEditTask(user, taskId);
     if (!perm.fullEdit && task.creatorId !== user.id) {
       return { error: "You do not have permission to delete this task." };
+    }
+
+    // Spec Rule 8: Deleting a DONE subtask requires elevated permission (Admin or Manager)
+    if (
+      task.parentId &&
+      task.status === "DONE" &&
+      user.role !== "ADMIN" &&
+      user.role !== "MANAGER"
+    ) {
+      return {
+        error: "Only Admins or Project Managers can delete a completed subtask.",
+      };
     }
 
     await prisma.task.delete({ where: { id: taskId } });
