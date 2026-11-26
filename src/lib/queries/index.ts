@@ -122,7 +122,7 @@ export async function getTasksList(
     includeSubtasksAsTopLevel?: boolean;
   }
 ): Promise<TaskListItem[]> {
-  const cacheKey = `meridian:tasks:${user.id}:${user.role}:${
+  const cacheKey = `meridian:tasks:v2:${user.id}:${user.role}:${
     options?.projectId || "all"
   }:${options?.onlyMine ? "mine" : "all"}:${
     options?.includeSubtasksAsTopLevel ? "subs" : "top"
@@ -162,13 +162,17 @@ export async function getTasksList(
         startDate: true,
         dueDate: true,
         completedAt: true,
+        qaBypassed: true,
+        qaBypassedAt: true,
+        qaBypassReason: true,
+        qaBypassedBy: { select: { id: true, name: true, avatarUrl: true } },
         projectId: true,
         assigneeId: true,
         creatorId: true,
         parentId: true,
         createdAt: true,
         updatedAt: true,
-        project: { select: { id: true, code: true, name: true, color: true } },
+        project: { select: { id: true, code: true, name: true, color: true, managerId: true } },
         assignee: { select: userSelect },
         collaborators: {
           select: { user: { select: userSelect } },
@@ -215,6 +219,7 @@ export async function getTasksList(
       startDate: t.startDate?.toISOString() ?? null,
       dueDate: t.dueDate?.toISOString() ?? null,
       completedAt: t.completedAt?.toISOString() ?? null,
+      qaBypassedAt: t.qaBypassedAt?.toISOString() ?? null,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
       subtasks: t.subtasks.map((s) => ({

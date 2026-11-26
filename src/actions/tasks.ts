@@ -6,6 +6,7 @@ import path from "path";
 import { prisma } from "@/lib/prisma";
 import {
   canUserMarkTaskComplete,
+  isQaOrTester,
   validateTaskStatusTransition,
 } from "@/lib/utils";
 import { invalidateWorkspaceCache } from "@/lib/cache/redis";
@@ -274,6 +275,12 @@ export async function updateTaskAction(values: unknown) {
     const existing = await prisma.task.findUnique({
       where: { id: data.id },
       include: {
+        project: {
+          select: {
+            managerId: true,
+            members: { where: { userId: user.id }, select: { role: true } },
+          },
+        },
         _count: { select: { subtasks: true } },
         subtasks: { select: { status: true } },
         dependencies: {
@@ -284,6 +291,10 @@ export async function updateTaskAction(values: unknown) {
       },
     });
     if (!existing) return { error: "Task not found." };
+
+    const isProjectManagerOrLead =
+      existing.project.managerId === user.id ||
+      existing.project.members.some((m) => m.role === "LEAD");
 
     const updateData: Record<string, unknown> = {};
 
@@ -310,14 +321,17 @@ export async function updateTaskAction(values: unknown) {
         .map((d) => d.dependsOn.taskKey);
       const canOverrideBlockers =
         Boolean(data.forceBlockedOverride) &&
-        (user.role === "ADMIN" || user.role === "MANAGER");
+        (user.role === "ADMIN" ||
+          user.role === "MANAGER" ||
+          isProjectManagerOrLead);
       const transitionError = validateTaskStatusTransition({
         currentStatus: existing.status,
         nextStatus: data.status,
         isSubtask: Boolean(existing.parentId),
         totalSubtasks: existing._count.subtasks,
         incompleteSubtasks,
-        canMarkComplete: canUserMarkTaskComplete(user),
+        canMarkComplete:
+          canUserMarkTaskComplete(user) || isProjectManagerOrLead,
         hasAssignee: Boolean(effectiveAssigneeId),
         incompleteBlockers: canOverrideBlockers ? [] : incompleteBlockers,
       });
@@ -329,15 +343,40 @@ export async function updateTaskAction(values: unknown) {
       updateData.completedAt = data.status === "DONE" ? new Date() : null;
       if (data.status === "DONE") {
         updateData.progress = 100;
-      } else if (existing._count.subtasks === 0) {
-        updateData.progress =
-          data.status === "IN_REVIEW"
-            ? 75
-            : data.status === "IN_PROGRESS"
-            ? 40
-            : 0;
+        // Audit flag: if a non-QA, non-Admin Project Manager / Manager marks a parent ticket Done without QA verification
+        const isActorQa = isQaOrTester(user.designation, user.departmentName);
+        if (!existing.parentId && user.role !== "ADMIN" && !isActorQa) {
+          updateData.qaBypassed = true;
+          updateData.qaBypassedAt = new Date();
+          updateData.qaBypassedById = user.id;
+          updateData.qaBypassReason =
+            existing.assigneeId === user.id
+              ? "Self-closed by Project Manager without QA / Testing review"
+              : "Marked Done by Project Manager without QA / Testing verification";
+        } else if (!existing.parentId) {
+          updateData.qaBypassed = false;
+          updateData.qaBypassedAt = null;
+          updateData.qaBypassedById = null;
+          updateData.qaBypassReason = null;
+        }
       } else {
-        updateData.progress = Math.min(existing.progress, 90);
+        // Reopened or moved out of DONE — clear any QA bypass flag
+        if (!existing.parentId && existing.qaBypassed) {
+          updateData.qaBypassed = false;
+          updateData.qaBypassedAt = null;
+          updateData.qaBypassedById = null;
+          updateData.qaBypassReason = null;
+        }
+        if (existing._count.subtasks === 0) {
+          updateData.progress =
+            data.status === "IN_REVIEW"
+              ? 75
+              : data.status === "IN_PROGRESS"
+              ? 40
+              : 0;
+        } else {
+          updateData.progress = Math.min(existing.progress, 90);
+        }
       }
     }
 
@@ -495,6 +534,36 @@ export async function updateTaskAction(values: unknown) {
           taskId: updated.id,
         });
       }
+
+      // Notify all active Admins whenever a ticket is flagged as forcefully marked Done without QA
+      if (updateData.qaBypassed === true) {
+        await createActivityLog({
+          action: "QA_BYPASS_FLAGGED",
+          entityType: "TASK",
+          entityId: updated.id,
+          description: `forcefully marked ${updated.taskKey} (${updated.title}) Done without QA / Testing verification`,
+          actorId: user.id,
+          projectId: updated.projectId,
+          taskId: updated.id,
+        });
+
+        const admins = await prisma.user.findMany({
+          where: { role: "ADMIN", status: "ACTIVE", id: { not: user.id } },
+          select: { id: true },
+        });
+
+        for (const admin of admins) {
+          await createNotification({
+            userId: admin.id,
+            actorId: user.id,
+            type: "TASK_UPDATED",
+            title: `QA Bypass Flag: ${updated.taskKey}`,
+            message: `${user.name} forcefully marked "${updated.title}" Done without QA / Testing review.`,
+            link: `/tasks?taskId=${updated.id}`,
+            taskId: updated.id,
+          });
+        }
+      }
     }
 
     if (
@@ -562,6 +631,12 @@ export async function deleteTaskAction(taskId: string) {
         projectId: true,
         parentId: true,
         creatorId: true,
+        project: {
+          select: {
+            managerId: true,
+            members: { where: { userId: user.id }, select: { role: true } },
+          },
+        },
       },
     });
     if (!task) return { error: "Task not found." };
@@ -571,12 +646,17 @@ export async function deleteTaskAction(taskId: string) {
       return { error: "You do not have permission to delete this task." };
     }
 
-    // Spec Rule 8: Deleting a DONE subtask requires elevated permission (Admin or Manager)
+    const isProjectManagerOrLead =
+      task.project.managerId === user.id ||
+      task.project.members.some((m) => m.role === "LEAD");
+
+    // Spec Rule 8: Deleting a DONE subtask requires elevated permission (Admin, Manager, or Project Manager/Lead)
     if (
       task.parentId &&
       task.status === "DONE" &&
       user.role !== "ADMIN" &&
-      user.role !== "MANAGER"
+      user.role !== "MANAGER" &&
+      !isProjectManagerOrLead
     ) {
       return {
         error: "Only Admins or Project Managers can delete a completed subtask.",
@@ -781,6 +861,103 @@ export async function deleteAttachmentAction(attachmentId: string) {
     return { success: true };
   } catch {
     return { error: "Failed to delete attachment." };
+  }
+}
+
+export async function resolveQaBypassFlagAction(
+  taskId: string,
+  resolution: "APPROVE" | "REOPEN_FOR_QA"
+) {
+  try {
+    const user = await requireAuth();
+    if (user.role !== "ADMIN") {
+      return { error: "Only Admins can resolve QA bypass audit flags." };
+    }
+
+    const existing = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        taskKey: true,
+        title: true,
+        projectId: true,
+        assigneeId: true,
+        qaBypassedById: true,
+        _count: { select: { subtasks: true } },
+      },
+    });
+    if (!existing) return { error: "Task not found." };
+
+    if (resolution === "APPROVE") {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: {
+          qaBypassed: false,
+          qaBypassedAt: null,
+          qaBypassedById: null,
+          qaBypassReason: null,
+        },
+      });
+
+      await createActivityLog({
+        action: "QA_BYPASS_APPROVED",
+        entityType: "TASK",
+        entityId: existing.id,
+        description: `reviewed and approved QA bypass flag on ${existing.taskKey}`,
+        actorId: user.id,
+        projectId: existing.projectId,
+        taskId: existing.id,
+      });
+    } else {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: {
+          status: "IN_REVIEW",
+          completedAt: null,
+          progress: existing._count.subtasks > 0 ? 90 : 75,
+          qaBypassed: false,
+          qaBypassedAt: null,
+          qaBypassedById: null,
+          qaBypassReason: null,
+        },
+      });
+
+      await createActivityLog({
+        action: "QA_BYPASS_REOPENED",
+        entityType: "TASK",
+        entityId: existing.id,
+        description: `reopened ${existing.taskKey} back to In Review / QA for proper verification`,
+        actorId: user.id,
+        projectId: existing.projectId,
+        taskId: existing.id,
+      });
+
+      const notifyTarget = existing.qaBypassedById || existing.assigneeId;
+      if (notifyTarget && notifyTarget !== user.id) {
+        await createNotification({
+          userId: notifyTarget,
+          actorId: user.id,
+          type: "TASK_UPDATED",
+          title: `Returned to QA: ${existing.taskKey}`,
+          message: `${user.name} moved "${existing.title}" back to In Review / QA for proper testing verification.`,
+          link: `/tasks?taskId=${existing.id}`,
+          taskId: existing.id,
+        });
+      }
+    }
+
+    await invalidateWorkspaceCache();
+    revalidatePath("/tasks");
+    revalidatePath("/dashboard");
+    revalidatePath(`/projects/${existing.projectId}`);
+    return { success: true };
+  } catch (err) {
+    return {
+      error: formatTaskActionError(
+        err,
+        "Failed to resolve QA bypass flag."
+      ),
+    };
   }
 }
 

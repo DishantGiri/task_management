@@ -196,8 +196,10 @@ export function ProjectsListClient({
           {paginatedProjects.map((project) => {
             const canManage =
               currentUserRole === "ADMIN" ||
-              (currentUserRole === "MANAGER" &&
-                project.managerId === currentUserId);
+              project.managerId === currentUserId ||
+              project.members.some(
+                (m) => m.user.id === currentUserId && m.role === "LEAD"
+              );
 
             return (
               <div

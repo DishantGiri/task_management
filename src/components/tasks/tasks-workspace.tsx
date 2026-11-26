@@ -56,6 +56,7 @@ interface TasksWorkspaceProps {
   tags: TagSummary[];
   currentUserId: string;
   currentUserRole: Role;
+  canManageProject?: boolean;
   fixedProjectId?: string;
   defaultView?: ViewMode;
   showScopeToggle?: boolean;
@@ -72,6 +73,7 @@ export function TasksWorkspace({
   tags,
   currentUserId,
   currentUserRole,
+  canManageProject = false,
   fixedProjectId,
   defaultView = "kanban",
   showScopeToggle = false,
@@ -135,7 +137,9 @@ export function TasksWorkspace({
   }, [searchParams]);
 
   const canCreate =
-    currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
+    currentUserRole === "ADMIN" ||
+    currentUserRole === "MANAGER" ||
+    canManageProject;
 
   const myTasksCount = useMemo(
     () =>
@@ -483,7 +487,9 @@ export function TasksWorkspace({
           onSelectTask={handleOpenTask}
           onQuickAdd={handleQuickAdd}
           canCreate={canCreate}
+          currentUserId={currentUserId}
           currentUserRole={currentUserRole}
+          canManageProject={canManageProject}
         />
       )}
 

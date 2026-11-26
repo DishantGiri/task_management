@@ -252,19 +252,27 @@ export function TaskDetailDrawer({
     }
   }, [open, taskId, loadTask]);
 
+  const isProjectManager = Boolean(
+    task &&
+      (task.project.managerId === currentUserId || task.project.isProjectLead)
+  );
+
   const canFullEdit =
     currentUserRole === "ADMIN" ||
     currentUserRole === "MANAGER" ||
+    isProjectManager ||
     (task?.parentId !== null &&
       (task?.assigneeId === currentUserId ||
         task?.creatorId === currentUserId));
 
   const currentUserSummary = users.find((u) => u.id === currentUserId);
-  const canMarkComplete = canUserMarkTaskComplete({
-    role: currentUserRole,
-    designation: currentUserSummary?.designation,
-    departmentName: currentUserSummary?.department?.name,
-  });
+  const canMarkComplete =
+    isProjectManager ||
+    canUserMarkTaskComplete({
+      role: currentUserRole,
+      designation: currentUserSummary?.designation,
+      departmentName: currentUserSummary?.department?.name,
+    });
 
   const canUpdateStatus =
     canFullEdit ||
@@ -317,7 +325,9 @@ export function TaskDetailDrawer({
 
     const patch: Record<string, unknown> = {};
     const isAdminOrManager =
-      currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
+      currentUserRole === "ADMIN" ||
+      currentUserRole === "MANAGER" ||
+      isProjectManager;
 
     if (draftStatus !== task.status) {
       const incompleteSubtasks = task.subtasks.filter(
@@ -1448,7 +1458,8 @@ export function TaskDetailDrawer({
                             canUpdateStatus &&
                             (!isDone ||
                               currentUserRole === "ADMIN" ||
-                              currentUserRole === "MANAGER");
+                              currentUserRole === "MANAGER" ||
+                              isProjectManager);
                           return (
                             <div
                               key={sub.id}

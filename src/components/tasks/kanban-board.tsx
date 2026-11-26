@@ -337,14 +337,18 @@ export function KanbanBoard({
   onSelectTask,
   onQuickAdd,
   canCreate,
+  currentUserId,
   currentUserRole = "EMPLOYEE",
+  canManageProject = false,
 }: {
   tasks: TaskListItem[];
   onTasksChange: (next: TaskListItem[]) => void;
   onSelectTask: (id: string) => void;
   onQuickAdd: (status: TaskStatus) => void;
   canCreate: boolean;
+  currentUserId?: string;
   currentUserRole?: Role;
+  canManageProject?: boolean;
 }) {
   const router = useRouter();
   const [activeTask, setActiveTask] = useState<TaskListItem | null>(null);
@@ -457,8 +461,14 @@ export function KanbanBoard({
         title: d.dependsOn.title,
       }));
     const openBlockerKeys = openBlockers.map((b) => b.taskKey);
+    const isProjectManager =
+      canManageProject ||
+      (Boolean(currentUserId) &&
+        currentTask.project.managerId === currentUserId);
     const isAdminOrManager =
-      currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
+      currentUserRole === "ADMIN" ||
+      currentUserRole === "MANAGER" ||
+      isProjectManager;
 
     if (startStatus && startStatus !== targetStatus) {
       const incompleteSubtasks = currentTask.subtasks.filter(
@@ -524,8 +534,13 @@ export function KanbanBoard({
     setConfirmingMove(true);
     onTasksChange(optimisticTasks);
 
+    const isProjectManager =
+      canManageProject ||
+      (Boolean(currentUserId) && task.project.managerId === currentUserId);
     const isAdminOrManager =
-      currentUserRole === "ADMIN" || currentUserRole === "MANAGER";
+      currentUserRole === "ADMIN" ||
+      currentUserRole === "MANAGER" ||
+      isProjectManager;
     const res = await moveTaskKanbanAction(
       task.id,
       targetStatus,

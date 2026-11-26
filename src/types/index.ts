@@ -82,6 +82,14 @@ export interface TaskListItem {
   startDate: string | null;
   dueDate: string | null;
   completedAt: string | null;
+  qaBypassed?: boolean;
+  qaBypassedAt?: string | null;
+  qaBypassReason?: string | null;
+  qaBypassedBy?: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+  } | null;
   projectId: string;
   parentId: string | null;
   assigneeId: string | null;
@@ -94,6 +102,7 @@ export interface TaskListItem {
     name: string;
     color: string;
     managerId?: string;
+    isProjectLead?: boolean;
   };
   assignee: UserSummary | null;
   collaborators: { user: UserSummary }[];

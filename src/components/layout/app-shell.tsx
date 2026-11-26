@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderKanban,
+  Heart,
   Inbox,
   Layers,
   LayoutDashboard,
@@ -881,6 +882,43 @@ export function AppShell({
         <main className="flex-1 p-5 lg:p-7 max-w-[1440px] w-full mx-auto">
           {children}
         </main>
+
+        {/* Footer Tribute */}
+        <footer className="mt-auto border-t border-[#EAECF0] px-5 lg:px-7 py-3.5">
+          <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11.5px] text-[#737987]">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+              <span>Powered by</span>
+              <a
+                href="https://fishtailinfosolutions.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#20232B] hover:text-[#635BDB] transition-colors underline-offset-2 hover:underline"
+              >
+                Fishtail Infosolutions
+              </a>
+              <span className="text-[#9CA3AF]">·</span>
+              <span className="text-[#9CA3AF]">
+                Plan, Organize &amp; Achieve
+              </span>
+            </div>
+
+            <div className="inline-flex items-center gap-1.5">
+              <Heart
+                className="h-3.5 w-3.5 text-[#635BDB] shrink-0"
+                aria-hidden="true"
+              />
+              <span>Crafted with care by</span>
+              <a
+                href="https://dishantgiri.com.np"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#20232B] hover:text-[#635BDB] transition-colors underline-offset-2 hover:underline"
+              >
+                Dishant Giri
+              </a>
+            </div>
+          </div>
+        </footer>
       </div>
 
       {/* Quick Create Task Modal */}

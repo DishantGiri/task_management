@@ -160,7 +160,6 @@ export async function canManageProject(
   projectId: string
 ): Promise<boolean> {
   if (user.role === "ADMIN") return true;
-  if (user.role !== "MANAGER") return false;
 
   const project = await prisma.project.findFirst({
     where: {
@@ -182,6 +181,7 @@ export async function canCreateTaskInProject(
   parentId?: string | null
 ): Promise<boolean> {
   if (user.role === "ADMIN") return true;
+  if (await canManageProject(user, projectId)) return true;
   if (user.role === "MANAGER") {
     return canAccessProject(user, projectId);
   }
@@ -234,12 +234,19 @@ export async function canEditTask(
   if (!task) return { allowed: false, fullEdit: false };
   if (user.role === "ADMIN") return { allowed: true, fullEdit: true };
 
+  // Any user (including an Employee) assigned as Project Manager or Lead has full control strictly on THAT project
+  const isProjectManagerOrLead =
+    task.project.managerId === user.id ||
+    task.project.members.some((m) => m.role === "LEAD");
+  if (isProjectManagerOrLead) {
+    return { allowed: true, fullEdit: true };
+  }
+
   if (user.role === "MANAGER") {
-    const isProjectMemberOrManager =
-      task.project.managerId === user.id || task.project.members.length > 0;
+    const isProjectMember = task.project.members.length > 0;
     return {
-      allowed: isProjectMemberOrManager,
-      fullEdit: isProjectMemberOrManager,
+      allowed: isProjectMember,
+      fullEdit: isProjectMember,
     };
   }
 

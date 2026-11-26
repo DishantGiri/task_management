@@ -330,7 +330,7 @@ export function ProjectWorkspaceClient({
             <Users className="h-3.5 w-3.5" />
             Members ({project.members.length})
           </TabsTrigger>
-          {currentUserRole !== "EMPLOYEE" && (
+          {(currentUserRole !== "EMPLOYEE" || canManage) && (
             <TabsTrigger value="activity" className="gap-1.5">
               <Activity className="h-3.5 w-3.5" />
               Activity ({activities.length})
@@ -366,6 +366,7 @@ export function ProjectWorkspaceClient({
               tags={tags}
               currentUserId={currentUserId}
               currentUserRole={currentUserRole}
+              canManageProject={canManage}
               fixedProjectId={project.id}
               defaultView="kanban"
             />

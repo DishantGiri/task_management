@@ -69,9 +69,8 @@ export function ProjectFormDialog({
   const [memberSearch, setMemberSearch] = useState("");
   const [memberDeptFilter, setMemberDeptFilter] = useState("ALL");
 
-  const managerCandidates = users.filter(
-    (u) => u.role === "ADMIN" || u.role === "MANAGER"
-  );
+  // Admins can assign any active employee as the Project Manager for this project
+  const managerCandidates = users;
 
   // Derive distinct departments from prop + users so filter always shows all available departments
   const departmentOptions = useMemo(() => {
@@ -341,19 +340,34 @@ export function ProjectFormDialog({
               <Select
                 value={managerId}
                 disabled={currentUserRole !== "ADMIN"}
-                onValueChange={(v) => setValue("managerId", v)}
+                onValueChange={(v) => {
+                  setValue("managerId", v);
+                  setSelectedMembers((prev) =>
+                    prev.includes(v) ? prev : [...prev, v]
+                  );
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select project manager" />
                 </SelectTrigger>
                 <SelectContent>
                   {managerCandidates.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.name}
+                      {m.designation
+                        ? ` · ${m.designation}`
+                        : m.role === "EMPLOYEE"
+                        ? " · Employee"
+                        : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {currentUserRole === "ADMIN" && (
+                <p className="text-[10.5px] text-[#737987]">
+                  Any employee assigned here gets full control of this project only.
+                </p>
+              )}
             </div>
           </div>
 

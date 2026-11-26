@@ -23,12 +23,15 @@ export async function GET(
           name: true,
           color: true,
           managerId: true,
-          members: { where: { userId: user.id }, select: { id: true } },
+          members: { where: { userId: user.id }, select: { id: true, role: true } },
         },
       },
       parent: { select: { id: true, taskKey: true, title: true } },
       creator: {
         select: { id: true, name: true, email: true, avatarUrl: true, designation: true, role: true },
+      },
+      qaBypassedBy: {
+        select: { id: true, name: true, avatarUrl: true },
       },
       assignee: {
         select: { id: true, name: true, email: true, avatarUrl: true, designation: true, role: true },
@@ -112,6 +115,9 @@ export async function GET(
         name: task.project.name,
         color: task.project.color,
         managerId: task.project.managerId,
+        isProjectLead:
+          task.project.managerId === user.id ||
+          task.project.members.some((m) => m.role === "LEAD"),
       },
       activityLogs: [],
     },
