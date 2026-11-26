@@ -109,6 +109,7 @@ model User {
   personalTasks          PersonalTask[]
   personalNotes          PersonalNote[]
   sharedNotes            PersonalNoteShare[]
+  stickyNotes            StickyNote[]
   createdMilestones      Milestone[]     @relation("MilestoneCreator")
   projectPosts           ProjectPost[]
 
@@ -166,6 +167,21 @@ model PersonalNoteShare {
 
   @@unique([noteId, userId])
   @@index([userId])
+}
+
+model StickyNote {
+  id        String   @id @default(cuid())
+  title     String   @default("") @db.VarChar(120)
+  content   String   @default("") @db.Text
+  color     String   @default("amber") @db.VarChar(24)
+  isPinned  Boolean  @default(false)
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isPinned, updatedAt])
 }
 
 model Project {

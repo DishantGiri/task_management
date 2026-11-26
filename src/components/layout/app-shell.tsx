@@ -20,6 +20,7 @@ import {
   ListTodo,
   LogOut,
   Menu,
+  NotebookPen,
   Pin,
   Plus,
   Search,
@@ -117,7 +118,8 @@ const NAV_SECTIONS: NavSection[] = [
     title: "Personal",
     items: [
       { label: "My To-Dos", href: "/personal-tasks", icon: BookmarkCheck },
-      { label: "Notes", href: "/notes", icon: StickyNote },
+      { label: "Sticky Notes", href: "/sticky-notes", icon: StickyNote },
+      { label: "Notes", href: "/notes", icon: NotebookPen },
     ],
   },
   {

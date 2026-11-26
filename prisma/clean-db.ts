@@ -38,6 +38,7 @@ async function main() {
   // Delete child / join tables first to satisfy foreign key constraints
   await prisma.personalNoteShare.deleteMany();
   await prisma.personalNote.deleteMany();
+  await prisma.stickyNote.deleteMany();
   await prisma.personalTask.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.activityLog.deleteMany();

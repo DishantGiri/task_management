@@ -14,6 +14,7 @@ export default function robots(): MetadataRoute.Robots {
           "/my-tasks",
           "/calendar",
           "/personal-tasks",
+          "/sticky-notes",
           "/notes",
           "/inbox",
           "/team",

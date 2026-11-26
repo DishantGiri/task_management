@@ -26,7 +26,8 @@ const cachedPrisma =
   "milestone" in globalForPrisma.prisma &&
   "projectPost" in globalForPrisma.prisma &&
   "personalNote" in globalForPrisma.prisma &&
-  "personalNoteShare" in globalForPrisma.prisma
+  "personalNoteShare" in globalForPrisma.prisma &&
+  "stickyNote" in globalForPrisma.prisma
     ? globalForPrisma.prisma
     : undefined;
 
