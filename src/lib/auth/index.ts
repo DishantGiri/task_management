@@ -4,6 +4,10 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 import { invalidateWorkspaceCache } from "@/lib/cache/redis";
+import {
+  findMatchingHrmsEmployee,
+  resolveOrCreateDepartmentId,
+} from "@/lib/hrms";
 import { authConfig, SUPER_ADMIN_EMAIL } from "./auth.config";
 
 // Force IPv4 for Google OAuth endpoints to prevent Node 22 undici IPv6 ETIMEDOUT
@@ -127,43 +131,103 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       if (!existing) {
-        const displayName = user.name?.trim() || email.split("@")[0];
+        // Auto-approve immediately if the employee exists in Fishtail HRMS
+        const hrmsMatch = await findMatchingHrmsEmployee({
+          email,
+          name: user.name,
+          googleAvatar,
+        });
+
+        const displayName =
+          user.name?.trim() || hrmsMatch?.name?.trim() || email.split("@")[0];
+        const isPreApproved = Boolean(hrmsMatch);
+        const mappedDepartmentId = hrmsMatch?.profession
+          ? await resolveOrCreateDepartmentId(prisma, hrmsMatch.profession)
+          : null;
+
         const created = await prisma.user.create({
           data: {
             name: displayName,
             email,
             passwordHash: "",
-            avatarUrl: googleAvatar,
+            avatarUrl: googleAvatar || hrmsMatch?.pictureUrl || null,
             role: "EMPLOYEE",
-            status: "PENDING",
-            designation: "Awaiting Admin Approval",
+            status: isPreApproved ? "ACTIVE" : "PENDING",
+            designation: isPreApproved
+              ? hrmsMatch?.profession || "Team Member"
+              : "Awaiting Admin Approval",
+            departmentId: mappedDepartmentId,
           },
         });
         user.id = created.id;
 
-        // Notify all active Admins that a new employee is on hold awaiting role & approval
-        const admins = await prisma.user.findMany({
-          where: { role: "ADMIN", status: "ACTIVE" },
-          select: { id: true },
-        });
-        if (admins.length > 0) {
-          await prisma.notification.createMany({
-            data: admins.map((adm) => ({
-              userId: adm.id,
-              actorId: created.id,
-              type: "PROJECT_ADDED",
-              title: `Approval needed: ${displayName}`,
-              message: `${displayName} (${email}) signed in with Google and is on hold awaiting role assignment and approval.`,
-              link: "/team?status=PENDING",
-            })),
+        if (!isPreApproved) {
+          // Notify all active Admins that a non-HRMS sign-in is on hold awaiting role & approval
+          const admins = await prisma.user.findMany({
+            where: { role: "ADMIN", status: "ACTIVE" },
+            select: { id: true },
           });
+          if (admins.length > 0) {
+            await prisma.notification.createMany({
+              data: admins.map((adm) => ({
+                userId: adm.id,
+                actorId: created.id,
+                type: "PROJECT_ADDED",
+                title: `Approval needed: ${displayName}`,
+                message: `${displayName} (${email}) signed in with Google and is on hold awaiting role assignment and approval.`,
+                link: "/team?status=PENDING",
+              })),
+            });
+          }
         }
       } else {
+        // If user was previously on hold (PENDING/INVITED) or has no department yet, check HRMS
+        let shouldAutoApprove = false;
+        let hrmsProfession: string | null = null;
+        let hrmsPic: string | null = null;
+        let mappedDepartmentId: string | null = null;
+
+        if (
+          existing.status === "PENDING" ||
+          existing.status === "INVITED" ||
+          !existing.departmentId
+        ) {
+          const hrmsMatch = await findMatchingHrmsEmployee({
+            email,
+            name: existing.name || user.name,
+            googleAvatar,
+          });
+          if (hrmsMatch) {
+            if (existing.status === "PENDING" || existing.status === "INVITED") {
+              shouldAutoApprove = true;
+            }
+            hrmsProfession = hrmsMatch.profession || null;
+            hrmsPic = hrmsMatch.pictureUrl || null;
+            if (!existing.departmentId && hrmsMatch.profession) {
+              mappedDepartmentId = await resolveOrCreateDepartmentId(
+                prisma,
+                hrmsMatch.profession
+              );
+            }
+          }
+        }
+
         const updated = await prisma.user.update({
           where: { id: existing.id },
           data: {
-            avatarUrl: googleAvatar || existing.avatarUrl || null,
+            avatarUrl: googleAvatar || existing.avatarUrl || hrmsPic || null,
             name: existing.name || user.name || email.split("@")[0],
+            ...(mappedDepartmentId ? { departmentId: mappedDepartmentId } : {}),
+            ...(shouldAutoApprove
+              ? {
+                  status: "ACTIVE",
+                  designation:
+                    !existing.designation ||
+                    existing.designation === "Awaiting Admin Approval"
+                      ? hrmsProfession || "Team Member"
+                      : existing.designation,
+                }
+              : {}),
           },
         });
         user.id = updated.id;

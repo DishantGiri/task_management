@@ -20,16 +20,34 @@ const prisma = new PrismaClient({ adapter });
 
 const DEPARTMENTS = [
   {
+    name: "Development",
+    description:
+      "Software engineering, full-stack, frontend, backend, WordPress, UI/UX, and DevOps.",
+  },
+  {
     name: "SEO",
-    description: "Search engine optimization, organic growth, and content visibility.",
+    description:
+      "Search engine optimization, organic growth, analytics, and digital visibility.",
   },
   {
-    name: "Video Generation",
-    description: "Video production, AI video generation, and multimedia creative.",
+    name: "QA & Testing",
+    description:
+      "Quality assurance, automated and manual software testing, and release sign-off.",
   },
   {
-    name: "Developement",
-    description: "Software development, web applications, and engineering.",
+    name: "Content & Video",
+    description:
+      "Content creation, video generation, creative media, and copywriting.",
+  },
+  {
+    name: "Human Resources",
+    description:
+      "People operations, talent acquisition, onboarding, and employee culture.",
+  },
+  {
+    name: "Management",
+    description:
+      "Executive leadership, project management, and company operations.",
   },
 ];
 

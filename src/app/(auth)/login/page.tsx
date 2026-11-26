@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Lock, ShieldCheck } from "lucide-react";
 import { googleLoginAction } from "@/actions/auth";
@@ -16,15 +16,94 @@ import {
 function LoginCard() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const popupRef = useRef<Window | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const authError = searchParams.get("error");
+
+  useEffect(() => {
+    const cleanup = () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "lakshya-auth-complete") {
+        cleanup();
+        popupRef.current?.close();
+        popupRef.current = null;
+        window.location.href = "/dashboard";
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      cleanup();
+    };
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    try {
-      await googleLoginAction();
-    } catch {
-      // NextAuth signIn throws NEXT_REDIRECT which Next.js handles automatically
+
+    // Open Google OAuth in a centered compact popup window
+    const width = 480;
+    const height = 620;
+    const left = Math.max(
+      0,
+      Math.round(window.screenX + (window.outerWidth - width) / 2)
+    );
+    const top = Math.max(
+      0,
+      Math.round(window.screenY + (window.outerHeight - height) / 2)
+    );
+
+    const popup = window.open(
+      "/google-popup",
+      "lakshya-google-auth",
+      `width=${width},height=${height},left=${left},top=${top},popup=yes,resizable=yes,scrollbars=yes`
+    );
+
+    // Fallback to full-page redirect only if the browser blocked popups
+    if (!popup || popup.closed) {
+      try {
+        await googleLoginAction();
+      } catch {
+        // NextAuth signIn throws NEXT_REDIRECT which Next.js handles automatically
+      }
+      return;
     }
+
+    popupRef.current = popup;
+    popup.focus();
+
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+    }
+
+    // Detect if user closes the popup manually (or finishes auth without postMessage)
+    pollTimerRef.current = setInterval(async () => {
+      if (!popupRef.current || popupRef.current.closed) {
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        popupRef.current = null;
+        try {
+          const res = await fetch("/api/auth/session", { cache: "no-store" });
+          const session = res.ok ? await res.json() : null;
+          if (session?.user?.email) {
+            window.location.href = "/dashboard";
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        setLoading(false);
+      }
+    }, 450);
   };
 
   return (
@@ -74,7 +153,7 @@ function LoginCard() {
               />
             </svg>
           )}
-          Continue with Google
+          {loading ? "Waiting for Google sign-in..." : "Continue with Google"}
         </Button>
 
         <div className="rounded-lg border border-[#EAECF0] bg-[#F7F8FA] p-3 text-[11.5px] text-[#525866] space-y-1.5">
@@ -83,8 +162,9 @@ function LoginCard() {
             Admin-Controlled Workspace Access
           </div>
           <p className="text-[#737987] leading-relaxed">
-            First-time sign-ins via company Gmail are placed on hold until an
-            administrator approves your account and assigns your role.
+            Employees listed in Fishtail HRMS are pre-approved automatically.
+            Other first-time Google sign-ins are placed on hold until an admin
+            approves access.
           </p>
         </div>
 

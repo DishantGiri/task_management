@@ -18,9 +18,12 @@ export default auth((req) => {
 
   const isAuthPage =
     pathname.startsWith("/login") || pathname.startsWith("/register");
+  const isPopupAuthRoute =
+    pathname.startsWith("/google-popup") ||
+    pathname.startsWith("/popup-complete");
   const isApiRoute = pathname.startsWith("/api");
 
-  if (isApiRoute) {
+  if (isApiRoute || isPopupAuthRoute) {
     return clearLegacyCookies(NextResponse.next());
   }
 
@@ -60,4 +63,3 @@ export const config = {
     "/((?!api/auth|api/time|_next/static|_next/image|favicon.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
-x
