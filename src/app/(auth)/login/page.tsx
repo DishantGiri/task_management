@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Lock, ShieldCheck } from "lucide-react";
+import { Loader2, Lock, ShieldCheck, UserCheck } from "lucide-react";
+import { toast } from "sonner";
 import { googleLoginAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +17,7 @@ import {
 function LoginCard() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [mockLoading, setMockLoading] = useState(false);
   const popupRef = useRef<Window | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const authError = searchParams.get("error");
@@ -106,6 +108,24 @@ function LoginCard() {
     }, 450);
   };
 
+  const handleMockEmployeeLogin = async () => {
+    setMockLoading(true);
+    try {
+      const res = await fetch("/api/mock-login", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) {
+        toast.error(data?.error || "Mock employee login failed.");
+        setMockLoading(false);
+        return;
+      }
+      toast.success("Signed in as Test Employee");
+      window.location.href = data.redirectTo || "/dashboard";
+    } catch {
+      toast.error("Could not reach the server. Please try again.");
+      setMockLoading(false);
+    }
+  };
+
   return (
     <Card className="border-[#EAECF0] shadow-card">
       <CardHeader className="pb-4 text-center">
@@ -155,6 +175,24 @@ function LoginCard() {
           )}
           {loading ? "Waiting for Google sign-in..." : "Continue with Google"}
         </Button>
+
+        {/* Single Test Employee Mock Login */}
+        <div className="pt-3 border-t border-[#EAECF0]">
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full h-9 gap-2 border border-dashed border-[#D5D9E2] bg-[#F7F8FA] text-xs font-medium text-[#525866] hover:border-[#635BDB]/50 hover:bg-[#F0EFFF]/60 hover:text-[#20232B]"
+            onClick={handleMockEmployeeLogin}
+            disabled={loading || mockLoading}
+          >
+            {mockLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#635BDB]" />
+            ) : (
+              <UserCheck className="h-3.5 w-3.5 text-[#16A34A]" />
+            )}
+            {mockLoading ? "Signing in..." : "Mock Login as Test Employee"}
+          </Button>
+        </div>
 
         <div className="rounded-lg border border-[#EAECF0] bg-[#F7F8FA] p-3 text-[11.5px] text-[#525866] space-y-1.5">
           <div className="flex items-center gap-1.5 font-medium text-[#20232B]">
