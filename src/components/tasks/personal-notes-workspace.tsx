@@ -609,7 +609,9 @@ export function PersonalNotesWorkspace({
     id: string;
     title: string;
     content: string;
+    updatedAt: string;
   } | null>(null);
+  const hasUnsavedRef = useRef<boolean>(false);
 
   useEffect(() => {
     setPortalMounted(true);
@@ -649,6 +651,11 @@ export function PersonalNotesWorkspace({
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [unsavedCloseOpen, setUnsavedCloseOpen] = useState(false);
+  const [conflictState, setConflictState] = useState<{
+    title: string;
+    content: string;
+    updatedAt: string;
+  } | null>(null);
 
   const openNote = useMemo(
     () => notes.find((n) => n.id === openNoteId) ?? null,
@@ -940,6 +947,7 @@ export function PersonalNotesWorkspace({
 
   // Sync editor when opening a note (restore newer client-side draft if present)
   useEffect(() => {
+    setConflictState(null);
     if (!openNote) {
       serverSnapshotRef.current = null;
       setDraftTitle("");
@@ -954,6 +962,7 @@ export function PersonalNotesWorkspace({
       id: openNote.id,
       title: serverTitle,
       content: serverContent,
+      updatedAt: openNote.updatedAt,
     };
 
     const localDraft = openNote.canEdit ? readLocalDraft(openNote.id) : null;
@@ -986,7 +995,7 @@ export function PersonalNotesWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openNote?.id, openNote?.canEdit, editor]);
 
-  // Keep latest draft ref in sync so mid-save keystrokes are never dropped
+  // Keep latest draft & unsaved refs in sync for background polling & mid-save safety
   useEffect(() => {
     latestDraftRef.current = {
       title: draftTitle.trim() || "Untitled Note",
@@ -994,8 +1003,122 @@ export function PersonalNotesWorkspace({
     };
   }, [draftTitle, draftContent]);
 
+  useEffect(() => {
+    hasUnsavedRef.current = hasUnsaved;
+  }, [hasUnsaved]);
+
+  // Apply remote collaborator update cleanly into the editor and local notes list
+  const applyRemoteNoteVersion = useCallback(
+    (remote: { id: string; title: string; content: string; updatedAt: string }) => {
+      const remoteTitle = remote.title.trim() || "Untitled Note";
+      const remoteNormalized = normalizeNoteHtml(remote.content);
+      serverSnapshotRef.current = {
+        id: remote.id,
+        title: remoteTitle,
+        content: remoteNormalized,
+        updatedAt: remote.updatedAt,
+      };
+      clearLocalDraft(remote.id);
+      setDraftTitle(remote.title);
+      setDraftContent(remote.content);
+      setHasUnsaved(false);
+      setConflictState(null);
+      if (editorRef.current) {
+        if (
+          normalizeNoteHtml(editorRef.current.getHTML()) !== remoteNormalized
+        ) {
+          editorRef.current.commands.setContent(remote.content || "", {
+            emitUpdate: false,
+          });
+        }
+      }
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === remote.id
+            ? {
+                ...n,
+                title: remote.title,
+                content: remote.content,
+                updatedAt: remote.updatedAt,
+              }
+            : n
+        )
+      );
+    },
+    []
+  );
+
+  // Fetch latest server version on open + poll every 3s for shared notes so collaborators see live updates
+  useEffect(() => {
+    if (!openNote) return;
+    const noteId = openNote.id;
+    const isSharedNote = !openNote.isOwner || openNote.shares.length > 0;
+    let cancelled = false;
+
+    const syncFromServer = async () => {
+      if (cancelled || backgroundSavingRef.current) return;
+      try {
+        const res = await fetch(`/api/notes/${noteId}`, { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const remote = (await res.json()) as {
+          id: string;
+          title: string;
+          content: string;
+          updatedAt: string;
+          canEdit: boolean;
+        };
+
+        const snap = serverSnapshotRef.current;
+        if (!snap || snap.id !== noteId) return;
+
+        const remoteMs = new Date(remote.updatedAt).getTime();
+        const snapMs = new Date(snap.updatedAt).getTime();
+        const remoteTitle = remote.title.trim() || "Untitled Note";
+        const remoteNormalized = normalizeNoteHtml(remote.content);
+        const contentDiffers =
+          remoteTitle !== snap.title || remoteNormalized !== snap.content;
+
+        if (remoteMs > snapMs + 500 && contentDiffers) {
+          if (!hasUnsavedRef.current) {
+            // No local unsaved edits -> seamlessly show collaborator's latest changes
+            applyRemoteNoteVersion(remote);
+          } else {
+            // Local unsaved edits exist -> surface conflict banner instead of overwriting
+            setConflictState({
+              title: remote.title,
+              content: remote.content,
+              updatedAt: remote.updatedAt,
+            });
+          }
+        }
+      } catch {
+        // ignore transient network errors
+      }
+    };
+
+    // Always pull latest server version immediately when opening a note
+    void syncFromServer();
+
+    if (!isSharedNote) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void syncFromServer();
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [openNote?.id, openNote?.isOwner, openNote?.shares.length, applyRemoteNoteVersion]);
+
   const handleSave = useCallback(
-    async (opts?: { silent?: boolean }) => {
+    async (opts?: { silent?: boolean; force?: boolean }) => {
       if (!openNote || !openNote.canEdit) return true;
       const savedTitle = draftTitle.trim() || "Untitled Note";
       const savedHtml = editor ? editor.getHTML() : draftContent;
@@ -1004,6 +1127,7 @@ export function PersonalNotesWorkspace({
       // Skip API call completely if nothing has actually changed vs server snapshot
       const snap = serverSnapshotRef.current;
       if (
+        !opts?.force &&
         snap &&
         snap.id === openNote.id &&
         snap.title === savedTitle &&
@@ -1025,12 +1149,22 @@ export function PersonalNotesWorkspace({
         id: openNote.id,
         title: savedTitle,
         content: savedHtml,
+        expectedUpdatedAt: snap?.updatedAt,
+        force: Boolean(opts?.force),
       });
 
       if (opts?.silent) {
         backgroundSavingRef.current = false;
       } else {
         setSaving(false);
+      }
+
+      if ("conflict" in res && res.conflict && res.latestNote) {
+        setConflictState(res.latestNote);
+        if (!opts?.silent) {
+          toast.error("Conflict detected — another collaborator edited this note.");
+        }
+        return false;
       }
 
       if (res.error) {
@@ -1043,7 +1177,9 @@ export function PersonalNotesWorkspace({
         id: openNote.id,
         title: savedTitle,
         content: normalizedHtml,
+        updatedAt,
       };
+      setConflictState(null);
       clearLocalDraft(openNote.id);
       setNotes((prev) =>
         prev.map((n) =>
@@ -1074,16 +1210,30 @@ export function PersonalNotesWorkspace({
     [openNote, editor, draftContent, draftTitle]
   );
 
-  // Silent 1-second server auto-save when Auto-save toggle is ON (no loading indicator, skips if unchanged)
+  // Silent 1-second server auto-save when Auto-save toggle is ON (paused during an unresolved conflict)
   useEffect(() => {
-    if (!autoSave || !openNote || !openNote.canEdit || !hasUnsaved) {
+    if (
+      !autoSave ||
+      !openNote ||
+      !openNote.canEdit ||
+      !hasUnsaved ||
+      conflictState
+    ) {
       return;
     }
     const timer = setTimeout(() => {
       handleSave({ silent: true });
     }, 1000);
     return () => clearTimeout(timer);
-  }, [autoSave, openNote, hasUnsaved, draftTitle, draftContent, handleSave]);
+  }, [
+    autoSave,
+    openNote,
+    hasUnsaved,
+    conflictState,
+    draftTitle,
+    draftContent,
+    handleSave,
+  ]);
 
   // Flush unsaved draft to localStorage on tab close / reload so nothing is lost
   useEffect(() => {
@@ -2038,6 +2188,46 @@ export function PersonalNotesWorkspace({
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Conflict Resolution Banner for Simultaneous Shared Edits */}
+          {conflictState && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 sm:px-6 py-2.5 text-xs shrink-0">
+              <div className="min-w-0">
+                <p className="font-semibold text-amber-900">
+                  Updated by another collaborator
+                </p>
+                <p className="text-[11px] text-amber-800">
+                  Someone else saved changes while you were editing. Auto-save is
+                  paused so neither version is lost.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2.5 text-[11.5px]"
+                  onClick={() =>
+                    applyRemoteNoteVersion({
+                      id: openNote.id,
+                      ...conflictState,
+                    })
+                  }
+                >
+                  Load Latest Version
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 px-2.5 text-[11.5px] bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={saving}
+                  onClick={() => handleSave({ force: true })}
+                >
+                  Keep Mine &amp; Overwrite
+                </Button>
+              </div>
             </div>
           )}
 

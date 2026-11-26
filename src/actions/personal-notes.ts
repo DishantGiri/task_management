@@ -17,6 +17,8 @@ const updateNoteSchema = z.object({
   icon: z.string().max(16).optional(),
   content: z.string().max(500000).optional(),
   isPinned: z.boolean().optional(),
+  expectedUpdatedAt: z.string().optional(),
+  force: z.boolean().optional(),
 });
 
 const shareNoteSchema = z.object({
@@ -95,6 +97,33 @@ export async function updatePersonalNoteAction(values: unknown) {
     const hasEditShare = existing.shares.some((s) => s.canEdit);
     if (!isOwner && !hasEditShare) {
       return { error: "You do not have permission to edit this note." };
+    }
+
+    // Optimistic concurrency conflict guard for simultaneous edits on shared notes
+    const isContentUpdate =
+      data.title !== undefined || data.content !== undefined;
+    if (isContentUpdate && !data.force && data.expectedUpdatedAt) {
+      const expectedMs = new Date(data.expectedUpdatedAt).getTime();
+      const serverMs = existing.updatedAt.getTime();
+      if (!Number.isNaN(expectedMs) && serverMs > expectedMs + 500) {
+        const nextTitle =
+          data.title !== undefined
+            ? data.title.trim() || "Untitled Note"
+            : existing.title;
+        const nextContent =
+          data.content !== undefined ? data.content : existing.content;
+        if (nextTitle !== existing.title || nextContent !== existing.content) {
+          return {
+            conflict: true as const,
+            error: "Another collaborator updated this note while you were editing.",
+            latestNote: {
+              title: existing.title,
+              content: existing.content,
+              updatedAt: existing.updatedAt.toISOString(),
+            },
+          };
+        }
+      }
     }
 
     const updateData: Record<string, unknown> = {};
