@@ -8,6 +8,7 @@ import {
   Clock,
   FolderKanban,
   ListTodo,
+  ShieldAlert,
   Users,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/permissions";
@@ -37,11 +38,16 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?reauth=1");
 
-  const [data, pendingApprovalCount] = await Promise.all([
+  const [data, pendingApprovalCount, qaBypassedCount] = await Promise.all([
     getDashboardData(user),
     user.role === "ADMIN"
       ? prisma.user.count({
           where: { status: { in: ["PENDING", "INVITED"] } },
+        })
+      : Promise.resolve(0),
+    user.role === "ADMIN"
+      ? prisma.task.count({
+          where: { qaBypassed: true, status: "DONE", parentId: null },
         })
       : Promise.resolve(0),
   ]);
@@ -122,6 +128,30 @@ export default async function DashboardPage() {
             className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#20232B] px-3 text-xs font-medium text-white hover:bg-[#374151] shrink-0"
           >
             Review &amp; Assign Roles
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
+
+      {/* Admin Audit Alert Banner for Tickets Forcefully Marked Done Without QA */}
+      {user.role === "ADMIN" && qaBypassedCount > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-xs shadow-subtle">
+          <div className="flex items-center gap-2.5">
+            <ShieldAlert className="h-4 w-4 shrink-0 text-red-600" />
+            <span className="text-[#20232B]">
+              <strong>
+                {qaBypassedCount}{" "}
+                {qaBypassedCount === 1 ? "ticket was" : "tickets were"}{" "}
+                forcefully marked Done without QA / Testing
+              </strong>{" "}
+              by a Project Manager. Review to approve or send back to QA.
+            </span>
+          </div>
+          <Link
+            href="/tasks?flagged=1"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-red-600 px-3 text-xs font-medium text-white hover:bg-red-700 shrink-0"
+          >
+            Review Flagged Tickets
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>

@@ -20,7 +20,9 @@ import {
   MessageSquare,
   Paperclip,
   Plus,
+  RotateCcw,
   Send,
+  ShieldAlert,
   Tag,
   Trash2,
   Upload,
@@ -35,6 +37,7 @@ import {
   createTaskAction,
   deleteAttachmentAction,
   deleteTaskAction,
+  resolveQaBypassFlagAction,
   updateTaskAction,
 } from "@/actions/tasks";
 import {
@@ -184,6 +187,7 @@ export function TaskDetailDrawer({
   // Delete dialog
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [resolvingFlag, setResolvingFlag] = useState(false);
   const [blockedSaveWarning, setBlockedSaveWarning] = useState<
     { taskKey: string; title: string }[] | null
   >(null);
@@ -784,6 +788,93 @@ export function TaskDetailDrawer({
                   </Button>
                 </div>
               </div>
+
+              {/* QA Bypass Audit Alert Banner */}
+              {task.qaBypassed && task.status === "DONE" && (
+                <div className="border-b border-red-200 bg-red-50 px-6 py-3 shrink-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <ShieldAlert className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-red-800">
+                          Forcefully Marked Done Without QA / Testing
+                        </p>
+                        <p className="text-[11px] text-red-700/90 mt-0.5">
+                          {task.qaBypassReason ||
+                            "Closed by Project Manager without QA verification"}
+                          {task.qaBypassedBy && (
+                            <>
+                              {" · "}
+                              <strong className="font-semibold">
+                                {task.qaBypassedBy.name}
+                              </strong>
+                            </>
+                          )}
+                          {task.qaBypassedAt && (
+                            <> · {formatRelativeTime(task.qaBypassedAt)}</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {currentUserRole === "ADMIN" && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={resolvingFlag}
+                          className="h-7 px-2.5 text-[11px] bg-white border-red-300 text-red-700 hover:bg-red-100"
+                          onClick={async () => {
+                            setResolvingFlag(true);
+                            const res = await resolveQaBypassFlagAction(
+                              task.id,
+                              "REOPEN_FOR_QA"
+                            );
+                            setResolvingFlag(false);
+                            if (res.error) {
+                              toast.error(res.error);
+                              return;
+                            }
+                            toast.success("Moved back to In Review / QA");
+                            needsBoardRefreshRef.current = true;
+                            await loadTask(task.id, { silent: true });
+                            router.refresh();
+                          }}
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Send to QA
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={resolvingFlag}
+                          className="h-7 px-2.5 text-[11px] bg-red-600 hover:bg-red-700 text-white"
+                          onClick={async () => {
+                            setResolvingFlag(true);
+                            const res = await resolveQaBypassFlagAction(
+                              task.id,
+                              "APPROVE"
+                            );
+                            setResolvingFlag(false);
+                            if (res.error) {
+                              toast.error(res.error);
+                              return;
+                            }
+                            toast.success("QA bypass flag cleared");
+                            needsBoardRefreshRef.current = true;
+                            await loadTask(task.id, { silent: true });
+                            router.refresh();
+                          }}
+                        >
+                          <Check className="h-3 w-3" />
+                          Approve
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Sticky Unsaved Changes Banner */}
               {canUpdateStatus && hasUnsavedChanges && (

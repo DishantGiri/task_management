@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Paperclip,
   Plus,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Role, TaskStatus } from "@prisma/client";
@@ -138,6 +139,21 @@ function KanbanTaskCard({
       <p className="text-[13px] font-medium leading-snug text-[#20232B] line-clamp-2 group-hover:text-[#5148C9] transition-colors">
         {task.title}
       </p>
+
+      {/* QA Bypass Audit Flag */}
+      {task.qaBypassed && task.status === "DONE" && (
+        <div
+          className="mt-2"
+          title={`${task.qaBypassReason || "Marked Done without QA / Testing"}${
+            task.qaBypassedBy ? ` by ${task.qaBypassedBy.name}` : ""
+          }`}
+        >
+          <span className="inline-flex items-center gap-1 rounded-[4px] border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+            <ShieldAlert className="h-3 w-3 shrink-0 text-red-600" />
+            Force-Closed · No QA
+          </span>
+        </div>
+      )}
 
       {/* Active Blocker Indicator (Modern Agile visibility) */}
       {task.status !== "DONE" &&

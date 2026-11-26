@@ -9,6 +9,7 @@ import {
   List,
   Plus,
   Search,
+  ShieldAlert,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -106,6 +107,9 @@ export function TasksWorkspace({
   );
   const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("ALL");
+  const [flaggedOnly, setFlaggedOnly] = useState<boolean>(
+    searchParams.get("flagged") === "1"
+  );
   const [sortBy, setSortBy] = useState<SortField>("updated");
 
   // Modals & Drawer
@@ -134,6 +138,9 @@ export function TasksWorkspace({
     if (ps === "mine" || ps === "all") {
       setScope(ps);
     }
+    if (searchParams.get("flagged") === "1") {
+      setFlaggedOnly(true);
+    }
   }, [searchParams]);
 
   const canCreate =
@@ -151,9 +158,17 @@ export function TasksWorkspace({
     [tasks, currentUserId]
   );
 
+  const flaggedCount = useMemo(
+    () => tasks.filter((t) => t.qaBypassed && t.status === "DONE").length,
+    [tasks]
+  );
+
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = tasks.filter((t) => {
+      if (flaggedOnly && !(t.qaBypassed && t.status === "DONE")) {
+        return false;
+      }
       if (
         showScopeToggle &&
         scope === "mine" &&
@@ -212,6 +227,7 @@ export function TasksWorkspace({
     statusFilter,
     priorityFilter,
     assigneeFilter,
+    flaggedOnly,
     sortBy,
     showScopeToggle,
     scope,
@@ -223,7 +239,8 @@ export function TasksWorkspace({
     (!fixedProjectId && projectFilter !== "ALL") ||
     statusFilter !== "ALL" ||
     priorityFilter !== "ALL" ||
-    assigneeFilter !== "ALL";
+    assigneeFilter !== "ALL" ||
+    flaggedOnly;
 
   const clearFilters = () => {
     setSearch("");
@@ -231,6 +248,7 @@ export function TasksWorkspace({
     setStatusFilter("ALL");
     setPriorityFilter("ALL");
     setAssigneeFilter("ALL");
+    setFlaggedOnly(false);
   };
 
   const handleOpenTask = (id: string) => {
@@ -460,6 +478,23 @@ export function TasksWorkspace({
               ))}
             </SelectContent>
           </Select>
+
+          {(flaggedCount > 0 || flaggedOnly) && (
+            <button
+              type="button"
+              onClick={() => setFlaggedOnly((prev) => !prev)}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                flaggedOnly
+                  ? "border-red-600 bg-red-600 text-white"
+                  : "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+              )}
+              title="Filter tickets forcefully marked Done without QA / Testing"
+            >
+              <ShieldAlert className="h-3.5 w-3.5" />
+              QA Bypassed ({flaggedCount})
+            </button>
+          )}
 
           {hasActiveFilters && (
             <button

@@ -238,6 +238,7 @@ export async function createTaskAction(values: unknown) {
       startDate: task.startDate?.toISOString() ?? null,
       dueDate: task.dueDate?.toISOString() ?? null,
       completedAt: task.completedAt?.toISOString() ?? null,
+      qaBypassedAt: task.qaBypassedAt?.toISOString() ?? null,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
       subtasks: task.subtasks.map((s) => ({

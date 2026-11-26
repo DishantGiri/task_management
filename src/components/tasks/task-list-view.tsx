@@ -11,6 +11,7 @@ import {
   GitBranch,
   MessageSquare,
   Paperclip,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
@@ -225,6 +226,22 @@ export function TaskListView({
                             >
                               {task.title}
                             </span>
+                            {task.qaBypassed && task.status === "DONE" && (
+                              <span
+                                title={`${
+                                  task.qaBypassReason ||
+                                  "Forcefully marked Done without QA / Testing"
+                                }${
+                                  task.qaBypassedBy
+                                    ? ` by ${task.qaBypassedBy.name}`
+                                    : ""
+                                }`}
+                                className="inline-flex shrink-0 items-center gap-1 rounded-[4px] border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                              >
+                                <ShieldAlert className="h-3 w-3 shrink-0 text-red-600" />
+                                No QA
+                              </span>
+                            )}
                           </div>
                           <div className="mt-0.5 flex items-center gap-2.5 text-[11px] text-[#9CA3AF]">
                             {hasSubtasks && (
