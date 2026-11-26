@@ -1,10 +1,18 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
+if (process.env.NODE_ENV === "production") {
+  dotenv.config({ path: ".env.production", override: true });
+} else {
+  dotenv.config({ path: ".env" });
+  dotenv.config({ path: ".env.development", override: true });
+  dotenv.config({ path: ".env.local", override: true });
+}
+
 const rawUrl =
   process.env.DATABASE_URL ||
-  "mysql://root:vanxunipaxi@127.0.0.1:3306/meridian_work";
+  "mysql://root:@127.0.0.1:3306/meridian_work";
 const parsed = new URL(rawUrl);
 
 const adapter = new PrismaMariaDb({

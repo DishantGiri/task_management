@@ -48,9 +48,9 @@ function LoginCard() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
 
-    // Open Google OAuth in a centered compact popup window
-    const width = 480;
-    const height = 620;
+    // Open Google OAuth in a centered, scrollbar-free compact popup window
+    const width = Math.min(520, Math.max(460, window.screen.availWidth - 40));
+    const height = Math.min(680, Math.max(560, window.screen.availHeight - 80));
     const left = Math.max(
       0,
       Math.round(window.screenX + (window.outerWidth - width) / 2)
@@ -63,7 +63,7 @@ function LoginCard() {
     const popup = window.open(
       "/google-popup",
       "lakshya-google-auth",
-      `width=${width},height=${height},left=${left},top=${top},popup=yes,resizable=yes,scrollbars=yes`
+      `width=${width},height=${height},left=${left},top=${top},popup=yes,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no`
     );
 
     // Fallback to full-page redirect only if the browser blocked popups
